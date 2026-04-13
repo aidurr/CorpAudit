@@ -15,7 +15,7 @@ fi
 
 # Build in release mode
 echo "Building release binary..."
-cargo build --release
+cargo build --release --target x86_64-unknown-linux-musl
 
 # Check if build succeeded
 if [ -f "target/release/corpaudit" ]; then
