@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(select-object *)",
+      "Bash(cargo build *)",
+      "Bash(findstr *)",
+      "Bash(.\\target\\release\\corpaudit.exe *)"
+    ]
+  },
+  "$version": 3
+}

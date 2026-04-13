@@ -1,0 +1,44 @@
+{
+  "telemetry_domains": [
+    "google-analytics.com",
+    "analytics.google.com",
+    "stats.pushshift.com",
+    "telemetry.mozilla.org",
+    "vortex.data.microsoft.com",
+    "settings-win.data.microsoft.com",
+    "telemetry.unity3d.com",
+    "config.edge.skype.com",
+    "browser.pipe.aria.microsoft.com",
+    "sb.scorecardresearch.com",
+    "doubleclick.net",
+    "facebook.com/tr",
+    "connect.facebook.net",
+    "amazonaws.com",
+    "cloudfront.net",
+    "segment.io",
+    "mixpanel.com",
+    "amplitude.com",
+    "fullstory.com",
+    "logrocket.com"
+  ],
+  "memory_threshold_mb": 200,
+  "cpu_threshold_percent": 10,
+  "startup_threshold_ms": 2000,
+  "permission_patterns": {
+    "camera": ["/dev/video", "/dev/v4l"],
+    "microphone": ["/dev/snd", "/proc/asound"],
+    "location": ["/proc/net/wireless", "/proc/net/arp"],
+    "filesystem": ["/home", "/root", "/mnt"],
+    "network": ["/proc/net", "/sys/class/net"],
+    "clipboard": ["/tmp/.X11-unix", "/run/user"]
+  },
+  "alternatives": {
+    "chrome": "Brave Browser, Firefox, LibreWolf",
+    "vscode": "VSCodium, Neovim, Helix",
+    "slack": "Matrix, Element, Mattermost",
+    "discord": "Matrix, Element, Guilded",
+    "teams": "Matrix, Element, Jitsi",
+    "spotify": "Spotifyd, Audacious, Rhythmbox",
+    "steam": "Heroic Games Launcher, Lutris, ProtonUp-Qt"
+  }
+}
