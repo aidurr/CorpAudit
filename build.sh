@@ -15,19 +15,22 @@ fi
 
 # Build in release mode
 echo "Building release binary..."
-cargo build --release
+rustup target add x86_64-unknown-linux-musl
+cargo build --release --target x86_64-unknown-linux-musl
+
+BINARY_PATH="target/x86_64-unknown-linux-musl/release/corpaudit"
 
 # Check if build succeeded
-if [ -f "target/release/corpaudit" ]; then
+if [ -f "$BINARY_PATH" ]; then
     echo "✓ Build successful!"
-    echo "Binary location: target/release/corpaudit"
+    echo "Binary location: $BINARY_PATH"
     echo ""
     echo "To install system-wide (optional):"
-    echo "  sudo cp target/release/corpaudit /usr/local/bin/"
+    echo "  sudo cp $BINARY_PATH /usr/local/bin/"
     echo ""
     echo "To run:"
-    echo "  ./target/release/corpaudit --all"
+    echo "  ./$BINARY_PATH --all"
 else
-    echo "✗ Build failed!"
+    echo "✗ Build failed! Binary not found at $BINARY_PATH"
     exit 1
 fi

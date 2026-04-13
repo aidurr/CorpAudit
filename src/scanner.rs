@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::process::Command;
 use sysinfo::System;
+use std::fs;
 
 pub struct Scanner {
     config: Config,
@@ -276,7 +277,7 @@ impl Scanner {
     }
 
     fn get_process_dependencies(&self, pid: u32) -> Result<Vec<String>> {
-        let dependencies = Vec::new();
+        let mut dependencies = Vec::new();
 
         #[cfg(unix)]
         {
