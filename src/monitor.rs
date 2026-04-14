@@ -38,7 +38,7 @@ pub struct AlertThreshold {
 impl Default for MonitorConfig {
     fn default() -> Self {
         Self {
-            scan_interval_seconds: 300, // 5 minutes
+            scan_interval_seconds: 300,      // 5 minutes
             quick_scan_interval_seconds: 60, // 1 minute
             enable_notifications: true,
             notification_method: NotificationType::Terminal,
@@ -89,7 +89,7 @@ impl Monitor {
     pub fn new(config: MonitorConfig, audit_config: Config) -> Result<Self> {
         let scanner = Scanner::new(
             audit_config,
-            false, // include_system
+            false,                // include_system
             "medium".to_string(), // min_severity
         );
 
@@ -104,10 +104,10 @@ impl Monitor {
 
     pub fn run(&mut self) -> Result<()> {
         info!("Starting CorpAudit monitor...");
-        
+
         loop {
             let scan_start = Instant::now();
-            
+
             match self.perform_scan() {
                 Ok(report) => {
                     let events = self.detect_changes(&report);
@@ -121,7 +121,7 @@ impl Monitor {
 
             let elapsed = scan_start.elapsed();
             let interval = Duration::from_secs(self.config.scan_interval_seconds);
-            
+
             if elapsed < interval {
                 let sleep_time = interval - elapsed;
                 info!("Next scan in {:.0} seconds", sleep_time.as_secs_f64());
@@ -132,33 +132,33 @@ impl Monitor {
 
     fn perform_scan(&mut self) -> Result<AuditReport> {
         info!("Performing scan...");
-        
+
         let mut report = AuditReport::new();
-        
+
         // Run all audits
         if let Some(telemetry_report) = self.scanner.scan_telemetry()? {
             report.telemetry = Some(telemetry_report);
         }
-        
+
         if let Some(bloat_report) = self.scanner.scan_bloat()? {
             report.bloat = Some(bloat_report);
         }
-        
+
         if let Some(permissions_report) = self.scanner.scan_permissions()? {
             report.permissions = Some(permissions_report);
         }
-        
+
         self.last_scan_time = Some(Instant::now());
-        
+
         Ok(report)
     }
 
     fn detect_changes(&mut self, current_report: &AuditReport) -> Vec<MonitorEvent> {
         let mut events = Vec::new();
-        
+
         // Get current PIDs
         let current_pids: HashSet<u32> = self.get_current_pids(current_report);
-        
+
         // Detect new processes
         if self.config.alert_threshold.new_process_alert {
             for pid in &current_pids {
@@ -176,38 +176,51 @@ impl Monitor {
                 }
             }
         }
-        
+
         // Detect telemetry changes
         if let (Some(prev), Some(curr)) = (&self.previous_report, &current_report.telemetry) {
             let prev_processes: HashSet<_> = prev.telemetry.as_ref().map_or(HashSet::new(), |t| {
                 t.findings.iter().map(|f| f.process_name.clone()).collect()
             });
-            
-            let curr_processes: HashSet<_> = curr.findings.iter()
+
+            let curr_processes: HashSet<_> = curr
+                .findings
+                .iter()
                 .map(|f| f.process_name.clone())
                 .collect();
-            
+
             // New telemetry
             for process in &curr_processes {
-                if !prev_processes.contains(process) && self.config.alert_threshold.new_telemetry_alert {
-                    if let Some(finding) = curr.findings.iter().find(|f| &f.process_name == process) {
+                if !prev_processes.contains(process)
+                    && self.config.alert_threshold.new_telemetry_alert
+                {
+                    if let Some(finding) = curr.findings.iter().find(|f| &f.process_name == process)
+                    {
                         events.push(MonitorEvent {
                             timestamp: Utc::now().to_rfc3339(),
                             event_type: MonitorEventType::NewTelemetryDetected,
                             process_name: process.clone(),
                             pid: finding.pid,
-                            details: format!("New telemetry detected: {} domains", finding.domains.len()),
+                            details: format!(
+                                "New telemetry detected: {} domains",
+                                finding.domains.len()
+                            ),
                             severity: finding.severity,
                         });
                     }
                 }
             }
-            
+
             // Removed telemetry
             for process in &prev_processes {
                 if !curr_processes.contains(process) {
-                    if let Some(finding) = prev.telemetry.as_ref().unwrap().findings.iter()
-                        .find(|f| &f.process_name == process) 
+                    if let Some(finding) = prev
+                        .telemetry
+                        .as_ref()
+                        .unwrap()
+                        .findings
+                        .iter()
+                        .find(|f| &f.process_name == process)
                     {
                         events.push(MonitorEvent {
                             timestamp: Utc::now().to_rfc3339(),
@@ -221,9 +234,11 @@ impl Monitor {
                 }
             }
         }
-        
+
         // Detect critical findings
-        if current_report.has_critical_issues() && self.config.alert_threshold.critical_telemetry_alert {
+        if current_report.has_critical_issues()
+            && self.config.alert_threshold.critical_telemetry_alert
+        {
             if let Some(ref telemetry) = current_report.telemetry {
                 for finding in &telemetry.findings {
                     if finding.severity == Severity::Critical {
@@ -239,10 +254,10 @@ impl Monitor {
                 }
             }
         }
-        
+
         // Update known PIDs
         self.known_pids = current_pids;
-        
+
         events
     }
 
@@ -250,7 +265,7 @@ impl Monitor {
         if events.is_empty() {
             return Ok(());
         }
-        
+
         match self.config.notification_method {
             NotificationType::Terminal => {
                 self.print_terminal_alerts(events);
@@ -259,17 +274,23 @@ impl Monitor {
                 self.log_alerts(events)?;
             }
         }
-        
+
         Ok(())
     }
 
     fn print_terminal_alerts(&self, events: &[MonitorEvent]) {
         use colored::Colorize;
-        
-        println!("\n{}", "══════════════════════════════════════════════════".cyan());
+
+        println!(
+            "\n{}",
+            "══════════════════════════════════════════════════".cyan()
+        );
         println!("{}", "CorpAudit Monitor Alert".cyan().bold());
-        println!("{}", "══════════════════════════════════════════════════".cyan());
-        
+        println!(
+            "{}",
+            "══════════════════════════════════════════════════".cyan()
+        );
+
         for event in events {
             let severity_str = match event.severity {
                 Severity::Critical => "[CRITICAL]".red().bold().to_string(),
@@ -277,7 +298,7 @@ impl Monitor {
                 Severity::Medium => "[MEDIUM]".yellow().to_string(),
                 Severity::Low => "[LOW]".green().to_string(),
             };
-            
+
             let event_type_str = match event.event_type {
                 MonitorEventType::NewTelemetryDetected => "New Telemetry",
                 MonitorEventType::TelemetryRemoved => "Telemetry Removed",
@@ -287,14 +308,17 @@ impl Monitor {
                 MonitorEventType::ProcessTerminated => "Process Terminated",
                 MonitorEventType::CriticalFinding => "Critical Finding",
             };
-            
+
             println!("\n{} {}", severity_str, event_type_str);
             println!("  Process: {} (PID: {})", event.process_name, event.pid);
             println!("  Details: {}", event.details);
             println!("  Time: {}", &event.timestamp[..19]);
         }
-        
-        println!("\n{}", "══════════════════════════════════════════════════\n".cyan());
+
+        println!(
+            "\n{}",
+            "══════════════════════════════════════════════════\n".cyan()
+        );
     }
 
     fn log_alerts(&self, events: &[MonitorEvent]) -> Result<()> {
@@ -316,31 +340,31 @@ impl Monitor {
                 event.details
             );
         }
-        
+
         Ok(())
     }
 
     fn get_current_pids(&self, report: &AuditReport) -> HashSet<u32> {
         let mut pids = HashSet::new();
-        
+
         if let Some(ref telemetry) = report.telemetry {
             for finding in &telemetry.findings {
                 pids.insert(finding.pid);
             }
         }
-        
+
         if let Some(ref bloat) = report.bloat {
             for finding in &bloat.findings {
                 pids.insert(finding.pid);
             }
         }
-        
+
         if let Some(ref permissions) = report.permissions {
             for finding in &permissions.findings {
                 pids.insert(finding.pid);
             }
         }
-        
+
         pids
     }
 
@@ -350,19 +374,19 @@ impl Monitor {
                 return Some(finding.process_name.clone());
             }
         }
-        
+
         if let Some(ref bloat) = report.bloat {
             if let Some(finding) = bloat.findings.iter().find(|f| f.pid == pid) {
                 return Some(finding.process_name.clone());
             }
         }
-        
+
         if let Some(ref permissions) = report.permissions {
             if let Some(finding) = permissions.findings.iter().find(|f| f.pid == pid) {
                 return Some(finding.process_name.clone());
             }
         }
-        
+
         None
     }
 }

@@ -4,9 +4,9 @@ use crate::audit::{Severity, TelemetryFinding};
 #[cfg(windows)]
 use anyhow::Result;
 
+use winreg::enums::*;
 #[cfg(windows)]
 use winreg::RegKey;
-use winreg::enums::*;
 
 pub struct WindowsTelemetryDetector {
     watched_registry_keys: Vec<String>,
@@ -62,7 +62,7 @@ impl WindowsTelemetryDetector {
 
         // Open the registry key
         let hklm = RegKey::predef(hive);
-        
+
         if let Ok(key) = hklm.open_subkey(&subkey) {
             // Check for telemetry-related values
             let telemetry_values = [
@@ -92,7 +92,8 @@ impl WindowsTelemetryDetector {
                                 "Windows telemetry enabled in registry: {}\\{}",
                                 key_path, value_name
                             ),
-                            recommendation: "Disable Windows telemetry via registry or group policy".to_string(),
+                            recommendation:
+                                "Disable Windows telemetry via registry or group policy".to_string(),
                         }));
                     }
                 }

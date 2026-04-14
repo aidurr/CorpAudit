@@ -8,6 +8,7 @@ pub struct AuditReport {
     pub telemetry: Option<TelemetryReport>,
     pub bloat: Option<BloatReport>,
     pub permissions: Option<PermissionsReport>,
+    pub startup: Option<StartupReport>,
     pub fixes: Option<Vec<Fix>>,
 }
 
@@ -19,6 +20,7 @@ impl AuditReport {
             telemetry: None,
             bloat: None,
             permissions: None,
+            startup: None,
             fixes: None,
         }
     }
@@ -66,6 +68,10 @@ impl AuditReport {
             output.push_str(&permissions.to_text());
         }
 
+        if let Some(ref startup) = self.startup {
+            output.push_str(&startup.to_text());
+        }
+
         if let Some(ref fixes) = self.fixes {
             output.push_str("\nRecommended Fixes\n");
             output.push_str(&format!("================\n"));
@@ -96,12 +102,174 @@ impl AuditReport {
             output.push_str(&permissions.to_markdown());
         }
 
+        if let Some(ref startup) = self.startup {
+            output.push_str(&startup.to_markdown());
+        }
+
         if let Some(ref fixes) = self.fixes {
             output.push_str("## Recommended Fixes\n\n");
             for fix in fixes {
                 output.push_str(&fix.to_markdown());
             }
         }
+
+        output
+    }
+
+    pub fn to_html(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n");
+        output.push_str("<meta charset=\"UTF-8\">\n");
+        output.push_str(
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n",
+        );
+        output.push_str("<title>CorpAudit Report</title>\n");
+        output.push_str("<style>\n");
+        output.push_str("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 2rem; background: #f5f5f5; color: #333; }\n");
+        output.push_str(".container { max-width: 900px; margin: 0 auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n");
+        output.push_str(
+            "h1 { color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 0.5rem; }\n",
+        );
+        output.push_str("h2 { color: #1e40af; margin-top: 2rem; }\n");
+        output.push_str("h3 { color: #374151; }\n");
+        output.push_str(".meta { color: #6b7280; margin-bottom: 1rem; }\n");
+        output.push_str(".critical { color: #dc2626; font-weight: bold; }\n");
+        output.push_str(".high { color: #ea580c; }\n");
+        output.push_str(".medium { color: #ca8a04; }\n");
+        output.push_str(".low { color: #16a34a; }\n");
+        output.push_str(".finding { background: #f9fafb; padding: 1rem; margin: 0.5rem 0; border-left: 4px solid #2563eb; border-radius: 4px; }\n");
+        output.push_str("table { width: 100%; border-collapse: collapse; margin: 1rem 0; }\n");
+        output.push_str(
+            "th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }\n",
+        );
+        output.push_str("th { background: #f3f4f6; }\n");
+        output.push_str(".badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem; font-weight: 500; }\n");
+        output.push_str("</style>\n</head>\n<body>\n");
+        output.push_str("<div class=\"container\">\n");
+
+        output.push_str(&format!("<h1>CorpAudit Report</h1>\n"));
+        output.push_str(&format!(
+            "<div class=\"meta\"><strong>Timestamp:</strong> {}</div>\n",
+            self.timestamp
+        ));
+        output.push_str(&format!(
+            "<div class=\"meta\"><strong>Hostname:</strong> {}</div>\n",
+            self.hostname
+        ));
+
+        if let Some(ref telemetry) = self.telemetry {
+            output.push_str("<h2>Telemetry & Data Collection</h2>\n");
+            output.push_str(&format!(
+                "<p>Total findings: <span class=\"badge critical\">{}</span></p>\n",
+                telemetry.findings.len()
+            ));
+            for finding in &telemetry.findings {
+                output.push_str("<div class=\"finding\">\n");
+                output.push_str(&format!("<h3>{}</h3>\n", finding.process_name));
+                output.push_str(&format!(
+                    "<p><span class=\"badge {}\">{:?}</span></p>\n",
+                    match finding.severity {
+                        Severity::Critical => "critical",
+                        Severity::High => "high",
+                        Severity::Medium => "medium",
+                        Severity::Low => "low",
+                    },
+                    finding.severity
+                ));
+                output.push_str(&format!("<p>{}</p>\n", finding.description));
+                if !finding.domains.is_empty() {
+                    output.push_str(&format!(
+                        "<p><strong>Domains:</strong> {}</p>\n",
+                        finding.domains.join(", ")
+                    ));
+                }
+                output.push_str(&format!("<p><em>{}</em></p>\n", finding.recommendation));
+                output.push_str("</div>\n");
+            }
+        }
+
+        if let Some(ref bloat) = self.bloat {
+            output.push_str("<h2>Application Bloat</h2>\n");
+            output.push_str(&format!(
+                "<p>Total findings: <span class=\"badge high\">{}</span></p>\n",
+                bloat.findings.len()
+            ));
+            for finding in &bloat.findings {
+                output.push_str("<div class=\"finding\">\n");
+                output.push_str(&format!("<h3>{}</h3>\n", finding.process_name));
+                output.push_str(&format!(
+                    "<p><span class=\"badge {}\">{:?}</span></p>\n",
+                    match finding.severity {
+                        Severity::Critical => "critical",
+                        Severity::High => "high",
+                        Severity::Medium => "medium",
+                        Severity::Low => "low",
+                    },
+                    finding.severity
+                ));
+                output.push_str(&format!(
+                    "<p>Memory: {:.2} MB | CPU: {:.2}%</p>\n",
+                    finding.memory_mb, finding.cpu_percent
+                ));
+                output.push_str(&format!("<p>{}</p>\n", finding.description));
+                if let Some(ref alt) = finding.alternative {
+                    output.push_str(&format!("<p><strong>Alternative:</strong> {}</p>\n", alt));
+                }
+                output.push_str("</div>\n");
+            }
+        }
+
+        if let Some(ref permissions) = self.permissions {
+            output.push_str("<h2>Application Permissions</h2>\n");
+            output.push_str(&format!(
+                "<p>Total findings: <span class=\"badge medium\">{}</span></p>\n",
+                permissions.findings.len()
+            ));
+            for finding in &permissions.findings {
+                output.push_str("<div class=\"finding\">\n");
+                output.push_str(&format!("<h3>{}</h3>\n", finding.process_name));
+                output.push_str(&format!(
+                    "<p><span class=\"badge {}\">{:?}</span></p>\n",
+                    match finding.severity {
+                        Severity::Critical => "critical",
+                        Severity::High => "high",
+                        Severity::Medium => "medium",
+                        Severity::Low => "low",
+                    },
+                    finding.severity
+                ));
+                output.push_str(&format!("<p>{}</p>\n", finding.description));
+                output.push_str("</div>\n");
+            }
+        }
+
+        if let Some(ref startup) = self.startup {
+            output.push_str("<h2>Startup Services</h2>\n");
+            output.push_str(&format!(
+                "<p>Total findings: <span class=\"badge low\">{}</span></p>\n",
+                startup.findings.len()
+            ));
+            for finding in &startup.findings {
+                output.push_str("<div class=\"finding\">\n");
+                output.push_str(&format!("<h3>{}</h3>\n", finding.name));
+                output.push_str(&format!(
+                    "<p><span class=\"badge {}\">{:?}</span></p>\n",
+                    match finding.severity {
+                        Severity::Critical => "critical",
+                        Severity::High => "high",
+                        Severity::Medium => "medium",
+                        Severity::Low => "low",
+                    },
+                    finding.severity
+                ));
+                output.push_str(&format!("<p><strong>Path:</strong> {}</p>\n", finding.path));
+                output.push_str(&format!("<p>{}</p>\n", finding.description));
+                output.push_str("</div>\n");
+            }
+        }
+
+        output.push_str("</div>\n</body>\n</html>");
 
         output
     }
@@ -604,4 +772,98 @@ impl fmt::Display for Severity {
             Severity::Critical => write!(f, "Critical"),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartupReport {
+    pub findings: Vec<StartupFinding>,
+    pub summary: StartupSummary,
+}
+
+impl StartupReport {
+    pub fn has_critical(&self) -> bool {
+        self.findings
+            .iter()
+            .any(|f| f.severity == Severity::Critical)
+    }
+
+    pub fn to_text(&self) -> String {
+        let mut output = String::new();
+        output.push_str("Startup Services\n");
+        output.push_str("==================\n");
+        output.push_str(&format!("Total findings: {}\n", self.findings.len()));
+        output.push_str(&format!(
+            "Critical: {}, High: {}, Medium: {}, Low: {}\n\n",
+            self.summary.critical, self.summary.high, self.summary.medium, self.summary.low
+        ));
+        for finding in &self.findings {
+            output.push_str(&finding.to_text());
+        }
+        output.push_str("\n");
+        output
+    }
+
+    pub fn to_markdown(&self) -> String {
+        let mut output = String::new();
+        output.push_str("## Startup Services\n\n");
+        output.push_str(&format!("- **Total findings:** {}\n", self.findings.len()));
+        output.push_str(&format!(
+            "- **Critical:** {}, **High:** {}, **Medium:** {}, **Low:** {}\n\n",
+            self.summary.critical, self.summary.high, self.summary.medium, self.summary.low
+        ));
+        for finding in &self.findings {
+            output.push_str(&finding.to_markdown());
+        }
+        output.push_str("\n");
+        output
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartupFinding {
+    pub name: String,
+    pub path: String,
+    pub enabled: bool,
+    pub impact: String,
+    pub severity: Severity,
+    pub description: String,
+    pub recommendation: String,
+}
+
+impl StartupFinding {
+    pub fn to_text(&self) -> String {
+        let mut output = String::new();
+        output.push_str(&format!("Service: {}\n", self.name));
+        output.push_str(&format!("Path: {}\n", self.path));
+        output.push_str(&format!("Enabled: {}\n", self.enabled));
+        output.push_str(&format!("Impact: {}\n", self.impact));
+        output.push_str(&format!("Severity: {:?}\n", self.severity));
+        output.push_str(&format!("Description: {}\n", self.description));
+        output.push_str(&format!("Recommendation: {}\n\n", self.recommendation));
+        output
+    }
+
+    pub fn to_markdown(&self) -> String {
+        let mut output = String::new();
+        output.push_str(&format!("### {}\n\n", self.name));
+        output.push_str(&format!("- **Path:** {}\n", self.path));
+        output.push_str(&format!("- **Enabled:** {}\n", self.enabled));
+        output.push_str(&format!("- **Impact:** {}\n", self.impact));
+        output.push_str(&format!("- **Severity:** {:?}\n", self.severity));
+        output.push_str(&format!("- **Description:** {}\n", self.description));
+        output.push_str(&format!(
+            "- **Recommendation:** {}\n\n",
+            self.recommendation
+        ));
+        output
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartupSummary {
+    pub total: usize,
+    pub critical: usize,
+    pub high: usize,
+    pub medium: usize,
+    pub low: usize,
 }

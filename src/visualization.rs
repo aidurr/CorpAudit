@@ -29,7 +29,8 @@ impl TrafficVisualizer {
     pub fn render_score_display(score: &PrivacyScore) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("Privacy Score: {}/100 [{}]\n", 
+        output.push_str(&format!(
+            "Privacy Score: {}/100 [{}]\n",
             score.overall_score as usize,
             score.grade.as_str()
         ));
@@ -37,11 +38,20 @@ impl TrafficVisualizer {
         output.push_str("\n\n");
 
         output.push_str("Score Breakdown:\n");
-        output.push_str(&Self::render_score_bar("Telemetry", score.telemetry_subscore));
+        output.push_str(&Self::render_score_bar(
+            "Telemetry",
+            score.telemetry_subscore,
+        ));
         output.push_str(&Self::render_score_bar("Bloat", score.bloat_subscore));
-        output.push_str(&Self::render_score_bar("Permissions", score.permissions_subscore));
+        output.push_str(&Self::render_score_bar(
+            "Permissions",
+            score.permissions_subscore,
+        ));
         output.push_str(&Self::render_score_bar("Network", score.network_subscore));
-        output.push_str(&Self::render_score_bar("Data Exposure", score.data_exposure_subscore));
+        output.push_str(&Self::render_score_bar(
+            "Data Exposure",
+            score.data_exposure_subscore,
+        ));
 
         output
     }
@@ -56,20 +66,27 @@ impl TrafficVisualizer {
         output.push_str(&format!("Current:  {}\n\n", comparison.current_timestamp));
 
         let summary = &comparison.summary;
-        output.push_str(&format!("Summary: {} changes detected\n", summary.total_changes));
+        output.push_str(&format!(
+            "Summary: {} changes detected\n",
+            summary.total_changes
+        ));
         output.push_str(&format!(
             "  Critical: {} | Significant: {} | Minor: {}\n",
-            summary.critical_changes,
-            summary.significant_changes,
-            summary.minor_changes
+            summary.critical_changes, summary.significant_changes, summary.minor_changes
         ));
 
         match &summary.overall_trend {
             crate::comparison::ChangeTrend::Improved { points } => {
-                output.push_str(&format!("  Overall Trend: ↑ Improved (+{:.0} points)\n\n", points));
+                output.push_str(&format!(
+                    "  Overall Trend: ↑ Improved (+{:.0} points)\n\n",
+                    points
+                ));
             }
             crate::comparison::ChangeTrend::Degraded { points } => {
-                output.push_str(&format!("  Overall Trend: ↓ Degraded (-{:.0} points)\n\n", points));
+                output.push_str(&format!(
+                    "  Overall Trend: ↓ Degraded (-{:.0} points)\n\n",
+                    points
+                ));
             }
             crate::comparison::ChangeTrend::Stable => {
                 output.push_str("  Overall Trend: → Stable\n\n");
@@ -89,7 +106,8 @@ impl TrafficVisualizer {
         output.push_str("─────────────────\n");
 
         if !comparison.telemetry_changes.new_findings.is_empty() {
-            output.push_str(&format!("\nNew Findings ({}):\n", 
+            output.push_str(&format!(
+                "\nNew Findings ({}):\n",
                 comparison.telemetry_changes.new_findings.len()
             ));
             for finding in &comparison.telemetry_changes.new_findings {
@@ -100,7 +118,8 @@ impl TrafficVisualizer {
                     finding.pid
                 ));
                 if !finding.domains.is_empty() {
-                    output.push_str(&format!("    - {} telemetry domains detected\n", 
+                    output.push_str(&format!(
+                        "    - {} telemetry domains detected\n",
                         finding.domains.len()
                     ));
                 }
@@ -108,7 +127,8 @@ impl TrafficVisualizer {
         }
 
         if !comparison.telemetry_changes.removed_findings.is_empty() {
-            output.push_str(&format!("\nRemoved Findings ({}):\n", 
+            output.push_str(&format!(
+                "\nRemoved Findings ({}):\n",
                 comparison.telemetry_changes.removed_findings.len()
             ));
             for finding in &comparison.telemetry_changes.removed_findings {
@@ -123,22 +143,19 @@ impl TrafficVisualizer {
         }
 
         if !comparison.telemetry_changes.changed_findings.is_empty() {
-            output.push_str(&format!("\nChanged Findings ({}):\n", 
+            output.push_str(&format!(
+                "\nChanged Findings ({}):\n",
                 comparison.telemetry_changes.changed_findings.len()
             ));
             for change in &comparison.telemetry_changes.changed_findings {
                 for field_change in &change.changes {
                     output.push_str(&format!(
                         "  [{}→{}] ✗ {}\n",
-                        field_change.old_value,
-                        field_change.new_value,
-                        change.process_name
+                        field_change.old_value, field_change.new_value, change.process_name
                     ));
                     output.push_str(&format!(
                         "    - {}: {} → {}\n",
-                        field_change.field,
-                        field_change.old_value,
-                        field_change.new_value
+                        field_change.field, field_change.old_value, field_change.new_value
                     ));
                 }
             }
@@ -154,7 +171,10 @@ impl TrafficVisualizer {
         output.push_str("═══════════════\n\n");
 
         // Total traffic
-        output.push_str(&format!("Total Traffic: {}\n", Self::format_bytes(summary.total_bytes)));
+        output.push_str(&format!(
+            "Total Traffic: {}\n",
+            Self::format_bytes(summary.total_bytes)
+        ));
 
         // Telemetry vs Normal bar
         let bar_width = 50;
@@ -225,7 +245,8 @@ impl TrafficVisualizer {
 
             // Show domains if suspicious
             if process.is_suspicious && !process.domains.is_empty() {
-                let domains_str = process.domains
+                let domains_str = process
+                    .domains
                     .iter()
                     .take(3)
                     .cloned()
@@ -371,8 +392,8 @@ impl TrafficVisualizer {
         values
             .iter()
             .map(|v| {
-                let idx = (((*v as f64 - min as f64) / range) * (spark_chars.len() - 1) as f64)
-                    as usize;
+                let idx =
+                    (((*v as f64 - min as f64) / range) * (spark_chars.len() - 1) as f64) as usize;
                 spark_chars[idx.min(spark_chars.len() - 1)]
             })
             .collect()
@@ -399,10 +420,9 @@ impl TrafficVisualizer {
 
         // Data
         for history in histories.iter().take(10) {
-            let total_findings = history.telemetry_count
-                + history.bloat_count
-                + history.permissions_count;
-            
+            let total_findings =
+                history.telemetry_count + history.bloat_count + history.permissions_count;
+
             let grade = if total_findings == 0 {
                 "A+"
             } else if total_findings < 3 {
@@ -516,5 +536,49 @@ impl TrafficVisualizer {
         } else {
             format!("{} B", bytes)
         }
+    }
+
+    pub fn render_timeline(data: &[(String, usize, usize, usize)]) -> String {
+        let mut output = String::new();
+
+        output.push_str("Resource Usage Timeline\n");
+        output.push_str("═══════════════════════\n\n");
+
+        if data.is_empty() {
+            output.push_str("No timeline data available.\n");
+            return output;
+        }
+
+        let max_findings = data.iter().map(|(_, t, b, p)| t + b + p).max().unwrap_or(1);
+        let bar_width = 40;
+
+        for (timestamp, telemetry, bloat, permissions) in data.iter().take(20) {
+            let total = telemetry + bloat + permissions;
+            let bar_len = if max_findings > 0 {
+                (total as f64 / max_findings as f64 * bar_width as f64) as usize
+            } else {
+                0
+            };
+
+            let date_short = if timestamp.len() >= 10 {
+                &timestamp[..10]
+            } else {
+                timestamp
+            };
+
+            output.push_str(&format!(
+                "{} T:{} B:{} P:{} {}\n",
+                date_short,
+                telemetry,
+                bloat,
+                permissions,
+                "█".repeat(bar_len.max(1))
+            ));
+        }
+
+        output.push_str(&format!("\nTotal scans: {}\n", data.len()));
+        output.push_str("T=Telemetry, B=Bloat, P=Permissions\n");
+
+        output
     }
 }

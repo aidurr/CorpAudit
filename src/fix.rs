@@ -76,7 +76,8 @@ fn apply_fix(fix: &Fix) -> Result<()> {
     let temp_file = NamedTempFile::new().context("Failed to create temporary file")?;
 
     #[cfg(windows)]
-    let temp_file = NamedTempFile::with_suffix(".bat").context("Failed to create temporary file")?;
+    let temp_file =
+        NamedTempFile::with_suffix(".bat").context("Failed to create temporary file")?;
 
     // Write the fix commands to the script
     let mut script_content = String::new();

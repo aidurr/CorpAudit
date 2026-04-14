@@ -1,5 +1,5 @@
 #[cfg(windows)]
-use crate::audit::{Fix, TelemetryFinding, BloatFinding, PermissionsFinding};
+use crate::audit::{BloatFinding, Fix, PermissionsFinding, TelemetryFinding};
 
 #[cfg(windows)]
 pub fn generate_windows_telemetry_fix(finding: &TelemetryFinding) -> Option<Fix> {
@@ -140,9 +140,7 @@ pub fn generate_windows_bloat_fix(finding: &BloatFinding) -> Option<Fix> {
             "# Consider using lightweight alternatives".to_string(),
             "# Review application settings for performance options".to_string(),
         ],
-        rollback_commands: vec![
-            "# No rollback needed for informational fix".to_string(),
-        ],
+        rollback_commands: vec!["# No rollback needed for informational fix".to_string()],
         safe: true,
     })
 }
@@ -152,7 +150,10 @@ pub fn generate_windows_permissions_fix(finding: &PermissionsFinding) -> Option<
     let process_name = &finding.process_name;
 
     Some(Fix {
-        id: format!("permissions-{}", process_name.replace(' ', "-").to_lowercase()),
+        id: format!(
+            "permissions-{}",
+            process_name.replace(' ', "-").to_lowercase()
+        ),
         title: format!("Restrict permissions for {}", process_name),
         description: finding.description.clone(),
         severity: finding.severity,
@@ -161,9 +162,7 @@ pub fn generate_windows_permissions_fix(finding: &PermissionsFinding) -> Option<
             "# Use Windows AppContainer or restricted tokens".to_string(),
             "# Review application privacy settings".to_string(),
         ],
-        rollback_commands: vec![
-            "# No rollback needed for informational fix".to_string(),
-        ],
+        rollback_commands: vec!["# No rollback needed for informational fix".to_string()],
         safe: true,
     })
 }

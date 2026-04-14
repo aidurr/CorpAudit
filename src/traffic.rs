@@ -145,15 +145,17 @@ impl TrafficAnalyzer {
                 // Update domain map
                 let domains_count = finding.domains.len().max(1);
                 for domain in &finding.domains {
-                    let entry = domain_map.entry(domain.clone()).or_insert_with(|| DomainTraffic {
-                        domain: domain.clone(),
-                        bytes_sent: 0,
-                        bytes_received: 0,
-                        total_bytes: 0,
-                        process_count: 0,
-                        processes: Vec::new(),
-                        category: Self::classify_domain(domain),
-                    });
+                    let entry = domain_map
+                        .entry(domain.clone())
+                        .or_insert_with(|| DomainTraffic {
+                            domain: domain.clone(),
+                            bytes_sent: 0,
+                            bytes_received: 0,
+                            total_bytes: 0,
+                            process_count: 0,
+                            processes: Vec::new(),
+                            category: Self::classify_domain(domain),
+                        });
 
                     entry.bytes_sent += bytes_sent / domains_count as u64;
                     entry.bytes_received += bytes_received / domains_count as u64;
@@ -230,7 +232,12 @@ impl TrafficAnalyzer {
 
     fn is_suspicious_traffic(domains: &[String]) -> bool {
         let suspicious_indicators = [
-            "telemetry", "analytics", "tracking", "stats", "metrics", "doubleclick",
+            "telemetry",
+            "analytics",
+            "tracking",
+            "stats",
+            "metrics",
+            "doubleclick",
             "scorecardresearch",
         ];
 

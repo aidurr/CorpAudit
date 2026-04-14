@@ -242,9 +242,10 @@ impl PrivacyScorer {
                     "discord", "teams", "spotify", "steam",
                 ];
 
-                if known_telemetry_apps.iter().any(|app| {
-                    finding.process_name.to_lowercase().contains(app)
-                }) {
+                if known_telemetry_apps
+                    .iter()
+                    .any(|app| finding.process_name.to_lowercase().contains(app))
+                {
                     score -= 5.0;
                 }
 
@@ -310,9 +311,10 @@ impl PrivacyScorer {
                 // Critical permission penalties
                 let critical_perms = ["camera", "microphone", "location", "contacts"];
                 for perm in &finding.permissions {
-                    if critical_perms.iter().any(|p| {
-                        perm.permission_type.to_lowercase().contains(p)
-                    }) {
+                    if critical_perms
+                        .iter()
+                        .any(|p| perm.permission_type.to_lowercase().contains(p))
+                    {
                         score -= 5.0;
                     }
                 }
@@ -322,7 +324,7 @@ impl PrivacyScorer {
         score.max(0.0)
     }
 
-    fn calculate_network_score(report: &AuditReport, weights: &ScoringWeights) -> f64 {
+    fn calculate_network_score(report: &AuditReport, _weights: &ScoringWeights) -> f64 {
         let mut score: f64 = 100.0;
 
         if let Some(ref telemetry) = report.telemetry {
@@ -387,10 +389,7 @@ impl PrivacyScorer {
 
             for finding in &telemetry.findings {
                 for domain in &finding.domains {
-                    if data_brokers
-                        .iter()
-                        .any(|broker| domain.contains(broker))
-                    {
+                    if data_brokers.iter().any(|broker| domain.contains(broker)) {
                         score -= 10.0;
                     }
                 }
@@ -431,12 +430,16 @@ impl PrivacyScorer {
             if *subscore < 50.0 {
                 recommendations.push(format!(
                     "{} score is critically low ({:.0}/100). Apply fixes for {} issues.",
-                    category, subscore, category.to_lowercase()
+                    category,
+                    subscore,
+                    category.to_lowercase()
                 ));
             } else if *subscore < 70.0 {
                 recommendations.push(format!(
                     "{} score is below average ({:.0}/100). Consider addressing {} issues.",
-                    category, subscore, category.to_lowercase()
+                    category,
+                    subscore,
+                    category.to_lowercase()
                 ));
             }
         }
@@ -445,17 +448,20 @@ impl PrivacyScorer {
         match score.grade {
             PrivacyGrade::F => {
                 recommendations.push(
-                    "Your privacy score is critically low. Immediate action recommended.".to_string(),
+                    "Your privacy score is critically low. Immediate action recommended."
+                        .to_string(),
                 );
             }
             PrivacyGrade::D => {
                 recommendations.push(
-                    "Significant privacy issues detected. Review and apply recommended fixes.".to_string(),
+                    "Significant privacy issues detected. Review and apply recommended fixes."
+                        .to_string(),
                 );
             }
             PrivacyGrade::C => {
                 recommendations.push(
-                    "Moderate privacy issues detected. Consider applying fixes to improve score.".to_string(),
+                    "Moderate privacy issues detected. Consider applying fixes to improve score."
+                        .to_string(),
                 );
             }
             _ => {

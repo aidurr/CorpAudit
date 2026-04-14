@@ -12,7 +12,6 @@ pub struct Config {
     pub startup_threshold_ms: u64,
     pub permission_patterns: HashMap<String, Vec<String>>,
     pub alternatives: HashMap<String, String>,
-    // New fields for advanced features
     #[serde(default = "default_history_retention_days")]
     pub history_retention_days: u32,
     #[serde(default = "default_threat_model")]
@@ -21,12 +20,24 @@ pub struct Config {
     pub monitor_interval_seconds: u64,
     #[serde(default = "default_enable_notifications")]
     pub enable_notifications: bool,
+    #[serde(default)]
+    pub whitelisted_processes: Vec<String>,
+    #[serde(default)]
+    pub whitelisted_domains: Vec<String>,
 }
 
-fn default_history_retention_days() -> u32 { 90 }
-fn default_threat_model() -> String { "balanced".to_string() }
-fn default_monitor_interval() -> u64 { 300 }
-fn default_enable_notifications() -> bool { true }
+fn default_history_retention_days() -> u32 {
+    90
+}
+fn default_threat_model() -> String {
+    "balanced".to_string()
+}
+fn default_monitor_interval() -> u64 {
+    300
+}
+fn default_enable_notifications() -> bool {
+    true
+}
 
 impl Default for Config {
     fn default() -> Self {
@@ -117,6 +128,8 @@ impl Default for Config {
             threat_model: "balanced".to_string(),
             monitor_interval_seconds: 300,
             enable_notifications: true,
+            whitelisted_processes: Vec::new(),
+            whitelisted_domains: Vec::new(),
         }
     }
 }
@@ -219,5 +232,55 @@ impl Config {
 
     pub fn set_startup_threshold(&mut self, threshold_ms: u64) {
         self.startup_threshold_ms = threshold_ms;
+    }
+
+    pub fn is_process_whitelisted(&self, process_name: &str) -> bool {
+        let lower = process_name.to_lowercase();
+        self.whitelisted_processes
+            .iter()
+            .any(|p| lower.contains(&p.to_lowercase()))
+    }
+
+    pub fn is_domain_whitelisted(&self, domain: &str) -> bool {
+        let lower = domain.to_lowercase();
+        self.whitelisted_domains
+            .iter()
+            .any(|d| lower.contains(&d.to_lowercase()))
+    }
+
+    pub fn add_process_to_whitelist(&mut self, process: String) -> bool {
+        if !self.whitelisted_processes.contains(&process) {
+            self.whitelisted_processes.push(process);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn add_domain_to_whitelist(&mut self, domain: String) -> bool {
+        if !self.whitelisted_domains.contains(&domain) {
+            self.whitelisted_domains.push(domain);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn remove_process_from_whitelist(&mut self, process: &str) -> bool {
+        if let Some(pos) = self.whitelisted_processes.iter().position(|p| p == process) {
+            self.whitelisted_processes.remove(pos);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn remove_domain_from_whitelist(&mut self, domain: &str) -> bool {
+        if let Some(pos) = self.whitelisted_domains.iter().position(|d| d == domain) {
+            self.whitelisted_domains.remove(pos);
+            true
+        } else {
+            false
+        }
     }
 }

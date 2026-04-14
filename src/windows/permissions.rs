@@ -68,10 +68,14 @@ fn has_device_access(_pid: u32, _device_type: &str) -> Result<bool> {
     // Check if process has handles to device
     // This is a simplified check - in reality, you'd need to enumerate process handles
     // For now, we'll check if the process is known to access these devices
-    
+
     // Known apps that access camera/microphone
-    let _camera_apps = ["teams", "zoom", "skype", "discord", "chrome", "firefox", "edge"];
-    let _microphone_apps = ["teams", "zoom", "skype", "discord", "chrome", "firefox", "edge", "spotify"];
+    let _camera_apps = [
+        "teams", "zoom", "skype", "discord", "chrome", "firefox", "edge",
+    ];
+    let _microphone_apps = [
+        "teams", "zoom", "skype", "discord", "chrome", "firefox", "edge", "spotify",
+    ];
 
     // We can't easily check this without native APIs
     // Return false for now - this would need deeper integration

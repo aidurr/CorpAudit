@@ -1,8 +1,8 @@
 use crate::audit::*;
 use crate::config::Config;
+use crate::startup;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::process::Command;
 use sysinfo::System;
 
@@ -53,6 +53,10 @@ impl Scanner {
                 continue;
             }
 
+            if self.config.is_process_whitelisted(&process_name) {
+                continue;
+            }
+
             if let Some(connections) = self.get_process_connections(pid.as_u32())? {
                 let mut telemetry_connections = Vec::new();
                 let mut domains = Vec::new();
@@ -61,10 +65,23 @@ impl Scanner {
 
                 for conn in connections {
                     if is_telemetry_connection(&conn, &telemetry_domains) {
+                        let is_whitelisted = conn
+                            .remote_address
+                            .split('.')
+                            .last()
+                            .map(|d| self.config.is_domain_whitelisted(d))
+                            .unwrap_or(false);
+
+                        if is_whitelisted {
+                            continue;
+                        }
+
                         telemetry_connections.push(conn.clone());
 
                         if let Some(domain) = resolve_domain(&conn.remote_address) {
-                            if !domains.contains(&domain) {
+                            if !self.config.is_domain_whitelisted(&domain)
+                                && !domains.contains(&domain)
+                            {
                                 domains.push(domain);
                             }
                         }
@@ -132,6 +149,10 @@ impl Scanner {
             let process_name = process.name().to_string_lossy().to_string();
 
             if !self.include_system && is_system_process(&process_name) {
+                continue;
+            }
+
+            if self.config.is_process_whitelisted(&process_name) {
                 continue;
             }
 
@@ -204,6 +225,10 @@ impl Scanner {
                 continue;
             }
 
+            if self.config.is_process_whitelisted(&process_name) {
+                continue;
+            }
+
             let permissions = self.check_process_permissions(pid.as_u32(), &permission_patterns)?;
 
             if !permissions.is_empty() {
@@ -239,8 +264,12 @@ impl Scanner {
         }
     }
 
+    pub fn scan_startup(&mut self) -> Result<Option<StartupReport>> {
+        startup::StartupScanner::scan()
+    }
+
     fn get_process_connections(&self, pid: u32) -> Result<Option<Vec<NetworkConnection>>> {
-        let mut connections = Vec::new();
+        let connections = Vec::new();
 
         #[cfg(unix)]
         {

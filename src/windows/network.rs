@@ -6,7 +6,6 @@ use anyhow::Result;
 
 #[cfg(windows)]
 pub fn get_process_connections(pid: u32) -> Result<Vec<NetworkConnection>> {
-    use windows::Win32::Foundation::*;
     use windows::Win32::NetworkManagement::IpHelper::*;
     use windows::Win32::Networking::WinSock::*;
 
@@ -38,7 +37,7 @@ pub fn get_process_connections(pid: u32) -> Result<Vec<NetworkConnection>> {
             if result == 0 {
                 let num_entries = *(tcp_table.as_ptr() as *const u32);
                 let row_size = std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
-                
+
                 for i in 0..num_entries {
                     let offset = 4 + (i as usize * row_size);
                     if offset + row_size <= tcp_table.len() {
@@ -62,8 +61,12 @@ pub fn get_process_connections(pid: u32) -> Result<Vec<NetworkConnection>> {
                                 ((row.dwRemoteAddr >> 24) & 0xFF) as u8,
                             );
 
-                            let local_port = ((row.dwLocalPort >> 8) & 0xFF | ((row.dwLocalPort & 0xFF) << 8)) as u16;
-                            let remote_port = ((row.dwRemotePort >> 8) & 0xFF | ((row.dwRemotePort & 0xFF) << 8)) as u16;
+                            let local_port = ((row.dwLocalPort >> 8) & 0xFF
+                                | ((row.dwLocalPort & 0xFF) << 8))
+                                as u16;
+                            let remote_port = ((row.dwRemotePort >> 8) & 0xFF
+                                | ((row.dwRemotePort & 0xFF) << 8))
+                                as u16;
 
                             connections.push(NetworkConnection {
                                 local_address: local_addr,
@@ -89,20 +92,33 @@ pub fn get_process_connections(pid: u32) -> Result<Vec<NetworkConnection>> {
 fn format_tcp_state(state: u32) -> String {
     // TCP state constants are i32, so we cast and compare
     use windows::Win32::NetworkManagement::IpHelper::*;
-    
+
     let state_i32 = state as i32;
-    
-    if state_i32 == MIB_TCP_STATE_CLOSED.0 { "CLOSED" }
-    else if state_i32 == MIB_TCP_STATE_LISTEN.0 { "LISTEN" }
-    else if state_i32 == MIB_TCP_STATE_SYN_SENT.0 { "SYN_SENT" }
-    else if state_i32 == MIB_TCP_STATE_SYN_RCVD.0 { "SYN_RCVD" }
-    else if state_i32 == MIB_TCP_STATE_ESTAB.0 { "ESTABLISHED" }
-    else if state_i32 == MIB_TCP_STATE_FIN_WAIT1.0 { "FIN_WAIT1" }
-    else if state_i32 == MIB_TCP_STATE_FIN_WAIT2.0 { "FIN_WAIT2" }
-    else if state_i32 == MIB_TCP_STATE_CLOSE_WAIT.0 { "CLOSE_WAIT" }
-    else if state_i32 == MIB_TCP_STATE_CLOSING.0 { "CLOSING" }
-    else if state_i32 == MIB_TCP_STATE_LAST_ACK.0 { "LAST_ACK" }
-    else if state_i32 == MIB_TCP_STATE_TIME_WAIT.0 { "TIME_WAIT" }
-    else { "UNKNOWN" }
+
+    if state_i32 == MIB_TCP_STATE_CLOSED.0 {
+        "CLOSED"
+    } else if state_i32 == MIB_TCP_STATE_LISTEN.0 {
+        "LISTEN"
+    } else if state_i32 == MIB_TCP_STATE_SYN_SENT.0 {
+        "SYN_SENT"
+    } else if state_i32 == MIB_TCP_STATE_SYN_RCVD.0 {
+        "SYN_RCVD"
+    } else if state_i32 == MIB_TCP_STATE_ESTAB.0 {
+        "ESTABLISHED"
+    } else if state_i32 == MIB_TCP_STATE_FIN_WAIT1.0 {
+        "FIN_WAIT1"
+    } else if state_i32 == MIB_TCP_STATE_FIN_WAIT2.0 {
+        "FIN_WAIT2"
+    } else if state_i32 == MIB_TCP_STATE_CLOSE_WAIT.0 {
+        "CLOSE_WAIT"
+    } else if state_i32 == MIB_TCP_STATE_CLOSING.0 {
+        "CLOSING"
+    } else if state_i32 == MIB_TCP_STATE_LAST_ACK.0 {
+        "LAST_ACK"
+    } else if state_i32 == MIB_TCP_STATE_TIME_WAIT.0 {
+        "TIME_WAIT"
+    } else {
+        "UNKNOWN"
+    }
     .to_string()
 }

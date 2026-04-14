@@ -131,20 +131,13 @@ impl DiffEngine {
         baseline: &AuditReport,
         current: &AuditReport,
     ) -> Result<ReportComparison> {
-        let telemetry_changes = Self::diff_telemetry(
-            baseline.telemetry.as_ref(),
-            current.telemetry.as_ref(),
-        );
+        let telemetry_changes =
+            Self::diff_telemetry(baseline.telemetry.as_ref(), current.telemetry.as_ref());
 
-        let bloat_changes = Self::diff_bloat(
-            baseline.bloat.as_ref(),
-            current.bloat.as_ref(),
-        );
+        let bloat_changes = Self::diff_bloat(baseline.bloat.as_ref(), current.bloat.as_ref());
 
-        let permissions_changes = Self::diff_permissions(
-            baseline.permissions.as_ref(),
-            current.permissions.as_ref(),
-        );
+        let permissions_changes =
+            Self::diff_permissions(baseline.permissions.as_ref(), current.permissions.as_ref());
 
         let score_changes = Self::calculate_score_changes(baseline, current)?;
 
@@ -186,18 +179,14 @@ impl DiffEngine {
         // New findings
         let new_findings: Vec<_> = current_findings
             .iter()
-            .filter(|f| {
-                !baseline_map.contains_key(&Self::normalize_process_name(&f.process_name))
-            })
+            .filter(|f| !baseline_map.contains_key(&Self::normalize_process_name(&f.process_name)))
             .cloned()
             .collect();
 
         // Removed findings
         let removed_findings: Vec<_> = baseline_findings
             .iter()
-            .filter(|f| {
-                !current_map.contains_key(&Self::normalize_process_name(&f.process_name))
-            })
+            .filter(|f| !current_map.contains_key(&Self::normalize_process_name(&f.process_name)))
             .cloned()
             .collect();
 
@@ -324,12 +313,8 @@ impl DiffEngine {
 
         // Check for new domains
         for (domain, processes) in &all_domains {
-            let in_baseline = baseline_map
-                .values()
-                .any(|f| f.domains.contains(domain));
-            let in_current = current_map
-                .values()
-                .any(|f| f.domains.contains(domain));
+            let in_baseline = baseline_map.values().any(|f| f.domains.contains(domain));
+            let in_current = current_map.values().any(|f| f.domains.contains(domain));
 
             if !in_baseline && in_current {
                 changes.push(DomainChange {
@@ -349,10 +334,7 @@ impl DiffEngine {
         changes
     }
 
-    fn diff_bloat(
-        baseline: Option<&BloatReport>,
-        current: Option<&BloatReport>,
-    ) -> BloatChanges {
+    fn diff_bloat(baseline: Option<&BloatReport>, current: Option<&BloatReport>) -> BloatChanges {
         let baseline_findings = baseline.map_or(Vec::new(), |r| r.findings.clone());
         let current_findings = current.map_or(Vec::new(), |r| r.findings.clone());
 
@@ -368,17 +350,13 @@ impl DiffEngine {
 
         let new_findings: Vec<_> = current_findings
             .iter()
-            .filter(|f| {
-                !baseline_map.contains_key(&Self::normalize_process_name(&f.process_name))
-            })
+            .filter(|f| !baseline_map.contains_key(&Self::normalize_process_name(&f.process_name)))
             .cloned()
             .collect();
 
         let removed_findings: Vec<_> = baseline_findings
             .iter()
-            .filter(|f| {
-                !current_map.contains_key(&Self::normalize_process_name(&f.process_name))
-            })
+            .filter(|f| !current_map.contains_key(&Self::normalize_process_name(&f.process_name)))
             .cloned()
             .collect();
 
@@ -473,17 +451,13 @@ impl DiffEngine {
 
         let new_findings: Vec<_> = current_findings
             .iter()
-            .filter(|f| {
-                !baseline_map.contains_key(&Self::normalize_process_name(&f.process_name))
-            })
+            .filter(|f| !baseline_map.contains_key(&Self::normalize_process_name(&f.process_name)))
             .cloned()
             .collect();
 
         let removed_findings: Vec<_> = baseline_findings
             .iter()
-            .filter(|f| {
-                !current_map.contains_key(&Self::normalize_process_name(&f.process_name))
-            })
+            .filter(|f| !current_map.contains_key(&Self::normalize_process_name(&f.process_name)))
             .cloned()
             .collect();
 
@@ -568,7 +542,10 @@ impl DiffEngine {
         changes
     }
 
-    fn calculate_score_changes(baseline: &AuditReport, current: &AuditReport) -> Result<Option<ScoreChanges>> {
+    fn calculate_score_changes(
+        baseline: &AuditReport,
+        current: &AuditReport,
+    ) -> Result<Option<ScoreChanges>> {
         // Calculate scores for both reports
         let baseline_score = PrivacyScorer::calculate_score(baseline, ThreatModel::Balanced);
         let current_score = PrivacyScorer::calculate_score(current, ThreatModel::Balanced);
@@ -603,9 +580,11 @@ impl DiffEngine {
         total_changes += telemetry.changed_findings.len();
 
         if !telemetry.new_findings.is_empty() {
-            critical_changes += telemetry.new_findings.iter().filter(|f| {
-                f.severity == Severity::Critical || f.severity == Severity::High
-            }).count();
+            critical_changes += telemetry
+                .new_findings
+                .iter()
+                .filter(|f| f.severity == Severity::Critical || f.severity == Severity::High)
+                .count();
             key_highlights.push(format!(
                 "✗ New telemetry detected for {} processes",
                 telemetry.new_findings.len()
