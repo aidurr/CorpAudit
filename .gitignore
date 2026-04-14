@@ -1,8 +1,9 @@
-# Rust
+# Build artifacts
 /target/
 **/*.rs.bk
+
+# Debug symbols
 *.pdb
-Cargo.lock
 
 # IDE
 .vscode/
@@ -18,17 +19,6 @@ Thumbs.db
 # Logs
 *.log
 
-# Config (user-specific)
-.config/corpaudit/
-
 # Temporary files
 *.tmp
 *.temp
-
-# Random
-config.example.json
-CONTRIBUTING.md
-IMPLEMENTATION_SUMMARY.md
-PROJECT_SUMMARY.md
-QUICKSTART.md
-cargo-check-output.txt
