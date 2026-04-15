@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
@@ -24,13 +25,13 @@ struct ScanResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FixItem {
-    pub id: String,
-    pub title: String,
-    pub description: String,
-    pub is_safe: bool,
-    pub selected: bool,
-    pub category: String,
-    pub commands_preview: Vec<String>,
+    id: String,
+    title: String,
+    description: String,
+    is_safe: bool,
+    selected: bool,
+    category: String,
+    commands_preview: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,18 +53,17 @@ struct AppState {
     create_restore_point: bool,
     anim_progress: f32,
     anim_pulse: f32,
-    selected_finding: Option<usize>,
     expanded_fix: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FindingEntry {
-    pub category: String,
-    pub process_name: String,
-    pub severity: String,
-    pub severity_color: [f32; 3],
-    pub description: String,
-    pub recommendation: String,
+    category: String,
+    process_name: String,
+    severity: String,
+    severity_color: [f32; 3],
+    description: String,
+    recommendation: String,
 }
 
 impl Default for AppState {
@@ -86,7 +86,6 @@ impl Default for AppState {
             create_restore_point: true,
             anim_progress: 0.0,
             anim_pulse: 0.0,
-            selected_finding: None,
             expanded_fix: None,
         }
     }
@@ -97,15 +96,61 @@ struct CorpAuditApp {
     last_tick: f64,
 }
 
+fn card_frame(ui: &egui::Ui) -> egui::Frame {
+    egui::Frame::group(ui.style())
+        .fill(egui::Color32::from_rgb(26, 29, 39))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
+        .rounding(12.0)
+}
+
 impl CorpAuditApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Configure dark theme
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
 
-        Self {
+        let mut app = Self {
             state: AppState::default(),
             last_tick: 0.0,
+        };
+
+        // Try to detect Windows version (inlined since gui.rs is a separate binary)
+        #[cfg(windows)]
+        {
+            use winreg::enums::*;
+            use winreg::RegKey;
+
+            fn get_reg_str(path: &str, value: &str) -> Option<String> {
+                if !path.starts_with("HKLM\\") { return None; }
+                let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+                hklm.open_subkey(&path[5..]).ok().and_then(|k| k.get_value::<String, _>(value).ok())
+            }
+
+            if let Some(build_str) = get_reg_str(
+                r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+                "CurrentBuildNumber",
+            ) {
+                if let Ok(build) = build_str.parse::<u32>() {
+                    let edition = get_reg_str(
+                        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+                        "ProductName",
+                    ).unwrap_or_else(|| "Windows".to_string());
+
+                    let display = get_reg_str(
+                        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+                        "DisplayVersion",
+                    ).unwrap_or_else(|| "Unknown".to_string());
+
+                    app.state.windows_build = format!("Build {} ({})", build, display);
+                    app.state.windows_edition = edition;
+                    app.state.is_win11 = build >= 22000;
+                }
+            }
         }
+        #[cfg(not(windows))]
+        {
+            app.state.windows_edition = "Non-Windows Platform".to_string();
+        }
+
+        app
     }
 
     fn run_scan(&mut self) {
@@ -123,25 +168,23 @@ impl CorpAuditApp {
             return;
         }
 
-        // Simulate scan progress (in real implementation, call actual scanner)
         self.state.scan_progress += dt * 0.15;
 
         if self.state.scan_progress < 0.25 {
-            self.state.scan_phase = "Scanning telemetry services...";
+            self.state.scan_phase = "Scanning telemetry services...".to_string();
         } else if self.state.scan_progress < 0.50 {
-            self.state.scan_phase = "Checking registry keys...";
+            self.state.scan_phase = "Checking registry keys...".to_string();
         } else if self.state.scan_progress < 0.75 {
-            self.state.scan_phase = "Analyzing process bloat...";
+            self.state.scan_phase = "Analyzing process bloat...".to_string();
         } else if self.state.scan_progress < 0.95 {
-            self.state.scan_phase = "Generating recommendations...";
+            self.state.scan_phase = "Generating recommendations...".to_string();
         } else {
             self.state.scan_progress = 1.0;
             self.state.scan_running = false;
             self.state.scan_complete = true;
-            self.state.scan_phase = "Complete";
-            self.state.status_message = "Scan finished - 12 findings";
+            self.state.scan_phase = "Complete".to_string();
+            self.state.status_message = "Scan finished - 12 findings".to_string();
 
-            // Simulated results
             self.state.scan_result = Some(ScanResult {
                 telemetry_count: 7,
                 bloat_count: 3,
@@ -218,9 +261,23 @@ impl CorpAuditApp {
             ];
         }
 
-        // Animation
         self.state.anim_progress = self.state.scan_progress;
         self.state.anim_pulse = (self.state.anim_pulse + dt * 2.0).sin().abs() * 0.3 + 0.7;
+    }
+
+    fn render_nav_button(&self, ui: &mut egui::Ui, view: &AppView, label: &str) {
+        let selected = self.state.current_view == *view;
+        let text_color = if selected {
+            egui::Color32::from_rgb(59, 130, 246)
+        } else {
+            egui::Color32::from_rgb(156, 163, 175)
+        };
+        let btn = egui::Button::new(
+            egui::RichText::new(label).size(13.0).color(text_color)
+        ).frame(false);
+        if ui.add(btn).clicked() {
+            // State mutation handled externally via pattern matching
+        }
     }
 }
 
@@ -232,41 +289,36 @@ impl eframe::App for CorpAuditApp {
 
         self.update_scan(dt);
 
-        // Top bar
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 16.0;
-
-                // Logo and title
-                ui.heading(egui::RichText::new("⬡ CorpAudit").color(egui::Color32::from_rgb(59, 130, 246)));
+                ui.heading(egui::RichText::new("\u{2B61} CorpAudit").color(egui::Color32::from_rgb(59, 130, 246)));
                 ui.separator();
 
-                // Navigation
-                let nav_items = [
-                    (AppView::Dashboard, "📊 Dashboard"),
-                    (AppView::Scan, "🔍 Scan"),
-                    (AppView::Findings, "🛡️ Findings"),
-                    (AppView::Fixes, "🔧 Fixes"),
-                    (AppView::Export, "💾 Export"),
-                    (AppView::Settings, "⚙️ Settings"),
+                let nav_items: [(AppView, &str); 6] = [
+                    (AppView::Dashboard, "\u{1F4CA} Dashboard"),
+                    (AppView::Scan, "\u{1F50D} Scan"),
+                    (AppView::Findings, "\u{1F6E1}\u{FE0F} Findings"),
+                    (AppView::Fixes, "\u{1F527} Fixes"),
+                    (AppView::Export, "\u{1F4BE} Export"),
+                    (AppView::Settings, "\u{2699}\u{FE0F} Settings"),
                 ];
 
                 for (view, label) in &nav_items {
                     let selected = self.state.current_view == *view;
-                    let btn = egui::Button::new(egui::RichText::new(*label)
-                        .size(13.0)
-                        .color(if selected {
-                            egui::Color32::from_rgb(59, 130, 246)
-                        } else {
-                            egui::Color32::from_rgb(156, 163, 175)
-                        }));
+                    let text_color = if selected {
+                        egui::Color32::from_rgb(59, 130, 246)
+                    } else {
+                        egui::Color32::from_rgb(156, 163, 175)
+                    };
+                    let btn = egui::Button::new(
+                        egui::RichText::new(*label).size(13.0).color(text_color)
+                    ).frame(false);
                     if ui.add(btn).clicked() {
                         self.state.current_view = view.clone();
                     }
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Status indicator
                     let status_color = if self.state.scan_running {
                         egui::Color32::YELLOW
                     } else if self.state.scan_complete {
@@ -274,13 +326,13 @@ impl eframe::App for CorpAuditApp {
                     } else {
                         egui::Color32::GRAY
                     };
-                    ui.small(egui::RichText::new("●").color(status_color));
-                    ui.small(egui::RichText::new(&self.state.status_message).color(egui::Color32::from_rgb(156, 163, 175)));
+                    ui.small(egui::RichText::new("\u{25CF}").color(status_color));
+                    ui.small(egui::RichText::new(&self.state.status_message)
+                        .color(egui::Color32::from_rgb(156, 163, 175)));
                 });
             });
         });
 
-        // Content
         egui::CentralPanel::default().show(ctx, |ui| {
             match self.state.current_view {
                 AppView::Dashboard => self.render_dashboard(ui),
@@ -292,7 +344,6 @@ impl eframe::App for CorpAuditApp {
             }
         });
 
-        // Force repaint if scan is running
         if self.state.scan_running {
             ctx.request_repaint();
         }
@@ -303,112 +354,90 @@ impl CorpAuditApp {
     fn render_dashboard(&mut self, ui: &mut egui::Ui) {
         ui.add_space(20.0);
 
-        // System info card
-        egui::Frame::group(ui.style())
-            .fill(egui::Color32::from_rgb(26, 29, 39))
-            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-            .corner_radius(12.0)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.small(egui::RichText::new("System").color(egui::Color32::from_rgb(156, 163, 175)));
-                        ui.heading(egui::RichText::new(&self.state.windows_edition).size(18.0));
-                        ui.small(egui::RichText::new(&self.state.windows_build).color(egui::Color32::from_rgb(107, 114, 128)));
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if self.state.is_win11 {
-                            ui.colored_label(egui::Color32::from_rgb(16, 185, 129), "✓ Windows 11");
-                        } else {
-                            ui.colored_label(egui::Color32::from_rgb(245, 158, 11), "⚠ Windows 10");
-                        }
-                    });
+        card_frame(ui).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.small(egui::RichText::new("System").color(egui::Color32::from_rgb(156, 163, 175)));
+                    ui.heading(egui::RichText::new(&self.state.windows_edition).size(18.0));
+                    ui.small(egui::RichText::new(&self.state.windows_build).color(egui::Color32::from_rgb(107, 114, 128)));
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if self.state.is_win11 {
+                        ui.colored_label(egui::Color32::from_rgb(16, 185, 129), "\u{2713} Windows 11");
+                    } else {
+                        ui.colored_label(egui::Color32::from_rgb(245, 158, 11), "\u{26A0} Windows 10");
+                    }
                 });
             });
+        });
 
         ui.add_space(16.0);
 
-        // Score card + Quick stats
         if let Some(ref result) = self.state.scan_result {
             ui.horizontal(|ui| {
-                // Privacy score
-                egui::Frame::group(ui.style())
-                    .fill(egui::Color32::from_rgb(26, 29, 39))
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-                    .corner_radius(12.0)
-                    .show(ui, |ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.small(egui::RichText::new("Privacy Score").color(egui::Color32::from_rgb(156, 163, 175)));
-                            ui.add_space(8.0);
-                            ui.heading(egui::RichText::new(format!("{:.0}", result.privacy_score))
-                                .size(48.0)
-                                .color(egui::Color32::from_rgb(
-                                    (result.grade_color[0] * 255.0) as u8,
-                                    (result.grade_color[1] * 255.0) as u8,
-                                    (result.grade_color[2] * 255.0) as u8,
-                                )));
-                            ui.heading(egui::RichText::new(&result.grade)
-                                .size(24.0)
-                                .color(egui::Color32::from_rgb(
-                                    (result.grade_color[0] * 255.0) as u8,
-                                    (result.grade_color[1] * 255.0) as u8,
-                                    (result.grade_color[2] * 255.0) as u8,
-                                )));
-                        });
-                    });
-
-                // Quick stats
-                egui::Frame::group(ui.style())
-                    .fill(egui::Color32::from_rgb(26, 29, 39))
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-                    .corner_radius(12.0)
-                    .show(ui, |ui| {
-                        ui.vertical(|ui| {
-                            ui.small(egui::RichText::new("Scan Results").color(egui::Color32::from_rgb(156, 163, 175)));
-                            ui.add_space(8.0);
-                            ui.label(egui::RichText::new(format!("🔍 {} Telemetry", result.telemetry_count))
-                                .color(egui::Color32::from_rgb(239, 68, 68)));
-                            ui.label(egui::RichText::new(format!("💾 {} Bloat", result.bloat_count))
-                                .color(egui::Color32::from_rgb(245, 158, 11)));
-                            ui.label(egui::RichText::new(format!("🛡️ {} Permissions", result.permissions_count))
-                                .color(egui::Color32::from_rgb(59, 130, 246)));
-                            ui.label(egui::RichText::new(format!("🚀 {} Startup", result.startup_count))
-                                .color(egui::Color32::from_rgb(16, 185, 129)));
-                        });
-                    });
-            });
-        } else {
-            // No scan yet
-            egui::Frame::group(ui.style())
-                .fill(egui::Color32::from_rgb(26, 29, 39))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-                .corner_radius(12.0)
-                .show(ui, |ui| {
+                card_frame(ui).show(ui, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.add_space(40.0);
-                        ui.heading(egui::RichText::new("No Scan Data").color(egui::Color32::from_rgb(107, 114, 128)));
-                        ui.small(egui::RichText::new("Run a scan to see your privacy score").color(egui::Color32::from_rgb(75, 85, 99)));
-                        ui.add_space(40.0);
-                        if ui.add(egui::Button::new(egui::RichText::new("▶ Run Scan").size(16.0))
-                            .fill(egui::Color32::from_rgb(59, 130, 246))
-                            .min_size(egui::vec2(200.0, 40.0))).clicked() {
-                            self.run_scan();
-                            self.state.current_view = AppView::Scan;
-                        }
+                        ui.small(egui::RichText::new("Privacy Score").color(egui::Color32::from_rgb(156, 163, 175)));
+                        ui.add_space(8.0);
+                        ui.heading(egui::RichText::new(format!("{:.0}", result.privacy_score))
+                            .size(48.0)
+                            .color(egui::Color32::from_rgb(
+                                (result.grade_color[0] * 255.0) as u8,
+                                (result.grade_color[1] * 255.0) as u8,
+                                (result.grade_color[2] * 255.0) as u8,
+                            )));
+                        ui.heading(egui::RichText::new(&result.grade)
+                            .size(24.0)
+                            .color(egui::Color32::from_rgb(
+                                (result.grade_color[0] * 255.0) as u8,
+                                (result.grade_color[1] * 255.0) as u8,
+                                (result.grade_color[2] * 255.0) as u8,
+                            )));
                     });
                 });
+
+                card_frame(ui).show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.small(egui::RichText::new("Scan Results").color(egui::Color32::from_rgb(156, 163, 175)));
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new(format!("\u{1F50D} {} Telemetry", result.telemetry_count))
+                            .color(egui::Color32::from_rgb(239, 68, 68)));
+                        ui.label(egui::RichText::new(format!("\u{1F4BE} {} Bloat", result.bloat_count))
+                            .color(egui::Color32::from_rgb(245, 158, 11)));
+                        ui.label(egui::RichText::new(format!("\u{1F6E1}\u{FE0F} {} Permissions", result.permissions_count))
+                            .color(egui::Color32::from_rgb(59, 130, 246)));
+                        ui.label(egui::RichText::new(format!("\u{1F680} {} Startup", result.startup_count))
+                            .color(egui::Color32::from_rgb(16, 185, 129)));
+                    });
+                });
+            });
+        } else {
+            card_frame(ui).show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(40.0);
+                    ui.heading(egui::RichText::new("No Scan Data").color(egui::Color32::from_rgb(107, 114, 128)));
+                    ui.small(egui::RichText::new("Run a scan to see your privacy score").color(egui::Color32::from_rgb(75, 85, 99)));
+                    ui.add_space(40.0);
+                    if ui.add(egui::Button::new(egui::RichText::new("\u{25B6} Run Scan").size(16.0))
+                        .fill(egui::Color32::from_rgb(59, 130, 246))
+                        .min_size(egui::vec2(200.0, 40.0))).clicked() {
+                        self.run_scan();
+                        self.state.current_view = AppView::Scan;
+                    }
+                });
+            });
         }
 
         ui.add_space(16.0);
 
-        // Readiness verdict
         if self.state.is_win11 {
             egui::Frame::group(ui.style())
                 .fill(egui::Color32::from_rgb(16, 185, 129).linear_multiply(0.1))
                 .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(16, 185, 129)))
-                .corner_radius(8.0)
+                .rounding(8.0)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("✅").size(20.0));
+                        ui.label(egui::RichText::new("\u{2705}").size(20.0));
                         ui.label(egui::RichText::new("System Ready for CorpAudit Windows 11 Features")
                             .color(egui::Color32::from_rgb(16, 185, 129)));
                     });
@@ -422,34 +451,28 @@ impl CorpAuditApp {
         ui.add_space(16.0);
 
         if self.state.scan_running {
-            // Progress bar
-            egui::Frame::group(ui.style())
-                .fill(egui::Color32::from_rgb(26, 29, 39))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-                .corner_radius(12.0)
-                .show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(&self.state.scan_phase).color(egui::Color32::from_rgb(156, 163, 175)));
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new(format!("{:.0}%", self.state.scan_progress * 100.0))
-                                    .color(egui::Color32::from_rgb(59, 130, 246)));
-                            });
+            card_frame(ui).show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(&self.state.scan_phase).color(egui::Color32::from_rgb(156, 163, 175)));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(egui::RichText::new(format!("{:.0}%", self.state.scan_progress * 100.0))
+                                .color(egui::Color32::from_rgb(59, 130, 246)));
                         });
-                        ui.add(egui::ProgressBar::new(self.state.anim_progress)
-                            .fill(egui::Color32::from_rgb(59, 130, 246))
-                            .desired_height(8.0)
-                            .corner_radius(4.0));
                     });
+                    ui.add(egui::ProgressBar::new(self.state.anim_progress)
+                        .fill(egui::Color32::from_rgb(59, 130, 246))
+                        .desired_height(8.0));
                 });
+            });
         } else if self.state.scan_complete {
             egui::Frame::group(ui.style())
                 .fill(egui::Color32::from_rgb(16, 185, 129).linear_multiply(0.1))
                 .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(16, 185, 129)))
-                .corner_radius(12.0)
+                .rounding(12.0)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("✅ Scan Complete").color(egui::Color32::from_rgb(16, 185, 129)));
+                        ui.label(egui::RichText::new("\u{2705} Scan Complete").color(egui::Color32::from_rgb(16, 185, 129)));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.add(egui::Button::new("View Findings")
                                 .fill(egui::Color32::from_rgb(59, 130, 246))).clicked() {
@@ -459,23 +482,19 @@ impl CorpAuditApp {
                     });
                 });
         } else {
-            egui::Frame::group(ui.style())
-                .fill(egui::Color32::from_rgb(26, 29, 39))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-                .corner_radius(12.0)
-                .show(ui, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(20.0);
-                        ui.heading(egui::RichText::new("Ready to Scan").color(egui::Color32::from_rgb(243, 244, 246)));
-                        ui.small(egui::RichText::new("Scan telemetry, bloat, permissions, and startup services").color(egui::Color32::from_rgb(107, 114, 128)));
-                        ui.add_space(20.0);
-                        if ui.add(egui::Button::new(egui::RichText::new("▶ Start Scan").size(16.0))
-                            .fill(egui::Color32::from_rgb(59, 130, 246))
-                            .min_size(egui::vec2(200.0, 40.0))).clicked() {
-                            self.run_scan();
-                        }
-                    });
+            card_frame(ui).show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(20.0);
+                    ui.heading(egui::RichText::new("Ready to Scan").color(egui::Color32::from_rgb(243, 244, 246)));
+                    ui.small(egui::RichText::new("Scan telemetry, bloat, permissions, and startup services").color(egui::Color32::from_rgb(107, 114, 128)));
+                    ui.add_space(20.0);
+                    if ui.add(egui::Button::new(egui::RichText::new("\u{25B6} Start Scan").size(16.0))
+                        .fill(egui::Color32::from_rgb(59, 130, 246))
+                        .min_size(egui::vec2(200.0, 40.0))).clicked() {
+                        self.run_scan();
+                    }
                 });
+            });
         }
     }
 
@@ -489,31 +508,27 @@ impl CorpAuditApp {
             return;
         }
 
-        for (i, finding) in self.state.findings.iter().enumerate() {
+        for finding in self.state.findings.iter() {
             let color = egui::Color32::from_rgb(
                 (finding.severity_color[0] * 255.0) as u8,
                 (finding.severity_color[1] * 255.0) as u8,
                 (finding.severity_color[2] * 255.0) as u8,
             );
 
-            egui::Frame::group(ui.style())
-                .fill(egui::Color32::from_rgb(26, 29, 39))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-                .corner_radius(8.0)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(&finding.severity).color(color));
-                        ui.label(egui::RichText::new(&finding.process_name).strong());
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.small(egui::RichText::new(&finding.category).color(egui::Color32::from_rgb(107, 114, 128)));
-                        });
+            card_frame(ui).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(&finding.severity).color(color));
+                    ui.label(egui::RichText::new(&finding.process_name).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.small(egui::RichText::new(&finding.category).color(egui::Color32::from_rgb(107, 114, 128)));
                     });
-                    ui.add_space(4.0);
-                    ui.label(egui::RichText::new(&finding.description).color(egui::Color32::from_rgb(156, 163, 175)));
-                    ui.add_space(4.0);
-                    ui.label(egui::RichText::new(format!("→ {}", finding.recommendation))
-                        .color(egui::Color32::from_rgb(59, 130, 246)));
                 });
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(&finding.description).color(egui::Color32::from_rgb(156, 163, 175)));
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(format!("\u{2192} {}", finding.recommendation))
+                    .color(egui::Color32::from_rgb(59, 130, 246)));
+            });
             ui.add_space(8.0);
         }
     }
@@ -528,31 +543,33 @@ impl CorpAuditApp {
             return;
         }
 
-        // Legend
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("✅ Safe").color(egui::Color32::GREEN));
-            ui.label(egui::RichText::new("⚠️ Requires Review").color(egui::Color32::YELLOW));
+            ui.label(egui::RichText::new("\u{2705} Safe").color(egui::Color32::GREEN));
+            ui.label(egui::RichText::new("\u{26A0}\u{FE0F} Requires Review").color(egui::Color32::YELLOW));
         });
         ui.add_space(12.0);
 
         for (i, fix) in self.state.fixes.iter_mut().enumerate() {
             let is_expanded = self.state.expanded_fix == Some(i);
 
+            let border_color = if is_expanded {
+                egui::Color32::from_rgb(59, 130, 246)
+            } else {
+                egui::Color32::from_rgb(55, 65, 81)
+            };
+
             egui::Frame::group(ui.style())
                 .fill(egui::Color32::from_rgb(26, 29, 39))
-                .stroke(egui::Stroke::new(1.0, if is_expanded {
-                    egui::Color32::from_rgb(59, 130, 246)
-                } else {
-                    egui::Color32::from_rgb(55, 65, 81)
-                }))
-                .corner_radius(8.0)
+                .stroke(egui::Stroke::new(1.0, border_color))
+                .rounding(8.0)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut fix.selected, "");
-                        ui.label(egui::RichText::new(if fix.is_safe { "✅" } else { "⚠️" }));
+                        ui.label(egui::RichText::new(if fix.is_safe { "\u{2705}" } else { "\u{26A0}\u{FE0F}" }));
                         ui.label(egui::RichText::new(&fix.title).strong());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button(if is_expanded { "▲" } else { "▼" }).clicked() {
+                            let expand_label = if is_expanded { "\u{25B2}" } else { "\u{25BC}" };
+                            if ui.small_button(expand_label).clicked() {
                                 self.state.expanded_fix = if is_expanded { None } else { Some(i) };
                             }
                         });
@@ -587,31 +604,27 @@ impl CorpAuditApp {
         ui.heading(egui::RichText::new("Export Report").size(24.0));
         ui.add_space(16.0);
 
-        egui::Frame::group(ui.style())
-            .fill(egui::Color32::from_rgb(26, 29, 39))
-            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-            .corner_radius(12.0)
-            .show(ui, |ui| {
-                ui.vertical(|ui| {
-                    ui.label("Format:");
-                    egui::ComboBox::from_id_salt("format")
-                        .selected_text(&self.state.export_format)
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.state.export_format, "JSON", "JSON");
-                            ui.selectable_value(&mut self.state.export_format, "HTML", "HTML");
-                        });
+        card_frame(ui).show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.label("Format:");
+                egui::ComboBox::from_id_salt("format")
+                    .selected_text(&self.state.export_format)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.state.export_format, "JSON".to_string(), "JSON");
+                        ui.selectable_value(&mut self.state.export_format, "HTML".to_string(), "HTML");
+                    });
 
-                    ui.add_space(8.0);
-                    ui.label("Output Path:");
-                    ui.text_edit_singleline(&mut self.state.export_path);
+                ui.add_space(8.0);
+                ui.label("Output Path:");
+                ui.text_edit_singleline(&mut self.state.export_path);
 
-                    ui.add_space(12.0);
-                    if ui.add(egui::Button::new("Export Report")
-                        .fill(egui::Color32::from_rgb(59, 130, 246))).clicked() {
-                        // TODO: Implement export
-                    }
-                });
+                ui.add_space(12.0);
+                if ui.add(egui::Button::new("Export Report")
+                    .fill(egui::Color32::from_rgb(59, 130, 246))).clicked() {
+                    // TODO: Implement export
+                }
             });
+        });
     }
 
     fn render_settings(&mut self, ui: &mut egui::Ui) {
@@ -619,26 +632,22 @@ impl CorpAuditApp {
         ui.heading(egui::RichText::new("Settings").size(24.0));
         ui.add_space(16.0);
 
-        egui::Frame::group(ui.style())
-            .fill(egui::Color32::from_rgb(26, 29, 39))
-            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 65, 81)))
-            .corner_radius(12.0)
-            .show(ui, |ui| {
-                ui.vertical(|ui| {
-                    ui.heading(egui::RichText::new("Safety").size(16.0));
-                    ui.add_space(8.0);
-                    ui.checkbox(&mut self.state.create_restore_point, "Create system restore point before applying fixes");
-                    ui.small(egui::RichText::new("Recommended: Allows rollback if fixes cause issues").color(egui::Color32::from_rgb(107, 114, 128)));
+        card_frame(ui).show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.heading(egui::RichText::new("Safety").size(16.0));
+                ui.add_space(8.0);
+                ui.checkbox(&mut self.state.create_restore_point, "Create system restore point before applying fixes");
+                ui.small(egui::RichText::new("Recommended: Allows rollback if fixes cause issues").color(egui::Color32::from_rgb(107, 114, 128)));
 
-                    ui.add_space(16.0);
-                    ui.heading(egui::RichText::new("About").size(16.0));
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new("CorpAudit v0.1.0").strong());
-                    ui.label(egui::RichText::new("Windows 11 Privacy Auditor").color(egui::Color32::from_rgb(156, 163, 175)));
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new("Built with privacy in mind. No telemetry, no cloud dependencies.").color(egui::Color32::from_rgb(107, 114, 128)));
-                });
+                ui.add_space(16.0);
+                ui.heading(egui::RichText::new("About").size(16.0));
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("CorpAudit v0.1.0").strong());
+                ui.label(egui::RichText::new("Windows 11 Privacy Auditor").color(egui::Color32::from_rgb(156, 163, 175)));
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Built with privacy in mind. No telemetry, no cloud dependencies.").color(egui::Color32::from_rgb(107, 114, 128)));
             });
+        });
     }
 }
 
@@ -647,8 +656,7 @@ pub fn run_gui() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([1024.0, 640.0])
-            .with_title("CorpAudit - Windows 11 Privacy Auditor")
-            .with_icon(egui::IconData::default()),
+            .with_title("CorpAudit - Windows 11 Privacy Auditor"),
         ..Default::default()
     };
 

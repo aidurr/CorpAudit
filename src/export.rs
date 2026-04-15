@@ -1,7 +1,6 @@
 use crate::audit::AuditReport;
 use anyhow::Result;
 use std::fs;
-use std::path::Path;
 
 pub fn export_report(report: &AuditReport, format: &str, output_path: &str) -> Result<()> {
     match format {

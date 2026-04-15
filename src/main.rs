@@ -593,9 +593,9 @@ fn run_audit(args: &Args) -> Result<AuditReport> {
                 #[cfg(windows)]
                 {
                     match windows::version::create_system_restore_point("Pre-CorpAudit Fix Application") {
-                        Ok(true) => info!("✓ System restore point created successfully"),
-                        Ok(false) => warn!("⚠ Failed to create restore point - continuing anyway"),
-                        Err(e) => warn!("⚠ Restore point error: {} - continuing anyway", e),
+                        Ok(true) => info!("System restore point created successfully"),
+                        Ok(false) => warn!("Failed to create restore point - continuing anyway"),
+                        Err(e) => warn!("Restore point error: {} - continuing anyway", e),
                     }
                 }
                 #[cfg(not(windows))]

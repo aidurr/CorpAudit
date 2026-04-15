@@ -11,6 +11,7 @@ use std::collections::HashMap;
 /// Note: Windows permission checking is more complex than Unix and requires
 /// advanced APIs. This is a stub that can be expanded later.
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn check_process_permissions(
     _pid: u32,
     _patterns: &HashMap<String, Vec<String>>,
