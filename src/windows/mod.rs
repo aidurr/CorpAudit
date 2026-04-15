@@ -12,3 +12,6 @@ pub mod telemetry;
 
 #[cfg(windows)]
 pub mod fixes;
+
+#[cfg(windows)]
+pub mod version;

@@ -1,267 +1,89 @@
-# CorpAudit
+# CorpAudit - Windows 11 Privacy Auditor
 
-**Audit corporate bloat, telemetry, and privacy violations on your system. Then fix it.**
+Audit corporate bloat, telemetry, and privacy violations on Windows 11.
 
-CorpAudit is a command-line tool that scans your system for:
-- **Telemetry and data collection** - Hidden connections sending your data
-- **Application bloat** - Resource-heavy apps wasting your system
-- **Privacy violations** - Unnecessary permissions and access
+## Quick Start
 
-## Why I Built This
+```bash
+# Run full audit
+corpaudit --all
 
-Corporate software increasingly ships with hidden telemetry and data collection. Modern applications are bloated with unnecessary features and dependencies. Users deserve transparency about what's running on their systems. Privacy should be the default, not an afterthought.
+# Launch GUI
+corpaudit --gui
 
-This tool gives you the power to audit, understand, and reclaim control over your digital environment.
+# Export report
+corpaudit --all --export-report report.json --export-format json
+
+# Create restore point + apply safe fixes
+corpaudit --all --fix --apply --restore-point
+
+# Check Windows version compatibility
+corpaudit --version-info
+```
 
 ## Features
 
--  **Comprehensive Scanning** - Detect telemetry, bloat, and permission issues
--  **Privacy-First** - No telemetry, no cloud dependencies, no vendor lock-in
--  **Fix Generation** - Generate scripts to fix identified issues
--  **Multiple Output Formats** - Text, JSON, and Markdown reports
--  **Configurable** - Customize thresholds and detection rules
--  **Fast** - Written in Rust for performance and safety
+### 🔍 Telemetry Detection
+- **35+ registry keys** checked across DataCollection, Cortana, Advertising, Office, Edge, and more
+- **5 telemetry services** monitored (DiagTrack, dmwappushservice, etc.)
+- **8 scheduled tasks** detected (CEIP, Compatibility Appraiser, etc.)
+- Version-aware (22H2/23H2/24H2 specific profiles)
 
-## Installation
+### 💾 Bloat Detection
+- Multi-process grouping for browsers/Electron apps
+- Per-core CPU normalization
+- Known-safe process exclusions (Defender, svchost, etc.)
+- Context-aware recommendations
 
-### From Source
+### 🔧 Safe Fix System
+- **Safe fixes**: Can be applied automatically with rollback
+- **Unsafe fixes**: Require manual review + admin privileges + restore point
+- Fix manifest generation (`--fix-manifest`)
+- System restore point creation before applying (`--restore-point`)
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/corpaudit.git
-cd corpaudit
+### 📊 Privacy Scoring
+- 5 threat models: Balanced, Paranoid, Casual, Enterprise, Gaming
+- Category-specific subscores
+- Actionable recommendations based on grade
 
-# Build the project
-cargo build --release
+### 💾 Export & Reporting
+- JSON export for CI/CD integration
+- HTML export with dark theme
+- Audit trails for compliance
 
-## Usage
+## GUI
 
-### Basic Scan
+Portmaster-style interface with:
+- Real-time scan progress
+- Privacy score dashboard
+- Finding details with severity colors
+- Fix preview pane (shows commands before applying)
+- Export controls
 
-```bash
-# Run all audits
-corpaudit --all
+## CLI Flags
 
-# Scan for specific issues
-corpaudit --telemetry
-corpaudit --bloat
-corpaudit --permissions
-```
+| Flag | Description |
+|------|-------------|
+| `--all` | Run full audit |
+| `--gui` | Launch graphical interface |
+| `--fix` | Generate fix scripts |
+| `--apply` | Apply fixes automatically |
+| `--restore-point` | Create system restore point before fixes |
+| `--export-report <path>` | Export report (JSON/HTML) |
+| `--fix-manifest` | Generate safe/unsafe fix manifest |
+| `--version-info` | Show Windows version and telemetry profile |
+| `--score` | Show privacy score |
+| `--safe` | Safe mode (no destructive operations) |
 
-### Generate Fixes
+## Readiness by User Type
 
-```bash
-# Generate fix scripts (non-destructive)
-corpaudit --all --fix
-
-# Apply fixes automatically (use with caution)
-corpaudit --all --fix --apply
-```
-
-### Output Options
-
-```bash
-# JSON output
-corpaudit --all --format json
-
-# Markdown output
-corpaudit --all --format markdown
-
-# Save to file
-corpaudit --all --output report.json
-```
-
-### Safe Mode
-
-```bash
-# Run in safe mode (no destructive operations)
-corpaudit --all --safe
-```
-
-### Advanced Options
-
-```bash
-# Include system processes in audit
-corpaudit --all --include-system
-
-# Set minimum severity level
-corpaudit --all --severity high
-
-# Verbose output
-corpaudit --all --verbose
-
-# Quiet mode (only show results)
-corpaudit --all --quiet
-```
-
-## Examples
-
-### Scan for Telemetry
-
-```bash
-$ corpaudit --telemetry
-
-"
-  /$$$$$$                                 /$$$$$$                  /$$ /$$   /$$
- /$$__  $$                               /$$__  $$                | $$|__/  | $$
-| $$  \__/  /$$$$$$   /$$$$$$   /$$$$$$ | $$  \ $$ /$$   /$$  /$$$$$$$ /$$ /$$$$$$
-| $$       /$$__  $$ /$$__  $$ /$$__  $$| $$$$$$$$| $$  | $$ /$$__  $$| $$|_  $$_/
-| $$      | $$  \ $$| $$  \__/| $$  \ $$| $$__  $$| $$  | $$| $$  | $$| $$  | $$
-| $$    $$| $$  | $$| $$      | $$  | $$| $$  | $$| $$  | $$| $$  | $$| $$  | $$ /$$
-|  $$$$$$/|  $$$$$$/| $$      | $$$$$$$/| $$  | $$|  $$$$$$/|  $$$$$$$| $$  |  $$$$/
- \______/  \______/ |__/      | $$____/ |__/  |__/ \______/  \_______/|__/   \___/
-                              | $$
-                              | $$
-                              |__/
-
-                   A U D I T   T O O L
-
-  See what's spying, bloating, or enslaving your system.
-  Then fix it.
-  "
-
-Scanning for telemetry and data collection...
-
-Telemetry & Data Collection
-===========================
-Total findings: 3
-Critical: 1, High: 1, Medium: 1, Low: 0
-
-Process: chrome (PID: 1234)
-Severity: Critical
-Description: chrome is making connections to known telemetry domains and may be collecting usage data.
-Connections: 5
-  - 192.168.1.100:54321 -> google-analytics.com:443 (TCP)
-  - 192.168.1.100:54322 -> analytics.google.com:443 (TCP)
-  ...
-Domains contacted: google-analytics.com, analytics.google.com
-Recommendation: Review chrome's privacy settings and disable telemetry if possible. Consider using privacy-focused alternatives.
-
-✓ Audit completed successfully
-```
-
-### Generate and Apply Fixes
-
-```bash
-$ corpaudit --all --fix
-
-Scanning for telemetry and data collection...
-Detecting bloated applications...
-Auditing application permissions...
-Generating fix scripts...
-
-Recommended Fixes
-================
-Fix: Disable telemetry for chrome
-Severity: Critical
-Description: chrome is making connections to known telemetry domains...
-Safe: true
-Commands:
-  # Disable Chrome telemetry
-  # Create Chrome policies directory
-  sudo mkdir -p /etc/opt/chrome/policies/managed
-  ...
-
-✓ Audit completed successfully
-```
-
-## Configuration
-
-CorpAudit uses a configuration file to customize behavior:
-
-```bash
-# View current configuration
-cat ~/.config/corpaudit/config.json
-
-# Edit configuration
-nano ~/.config/corpaudit/config.json
-```
-
-### Configuration Options
-
-```json
-{
-  "telemetry_domains": [
-    "google-analytics.com",
-    "analytics.google.com",
-    ...
-  ],
-  "memory_threshold_mb": 200.0,
-  "cpu_threshold_percent": 10.0,
-  "startup_threshold_ms": 2000,
-  "permission_patterns": {
-    "camera": ["/dev/video", "/dev/v4l"],
-    "microphone": ["/dev/snd", "/proc/asound"],
-    ...
-  },
-  "alternatives": {
-    "chrome": "Brave Browser, Firefox, LibreWolf",
-    "vscode": "VSCodium, Neovim, Helix",
-    ...
-  }
-}
-```
-
-## How It Works
-
-### Telemetry Detection
-
-CorpAudit scans running processes and their network connections to identify:
-- Connections to known telemetry domains
-- Data transmission patterns
-- Suspicious network activity
-
-### Bloat Detection
-
-The tool analyzes process metrics:
-- Memory usage (RSS)
-- CPU utilization
-- Startup time
-- Dependency count
-
-### Permission Auditing
-
-CorpAudit examines:
-- File descriptor access
-- System resource usage
-- Permission patterns
-
-## Safety
-
-CorpAudit is designed to be safe by default:
-
-- **Non-destructive scanning** - Read-only operations
-- **Safe mode** - Skip potentially risky operations
-- **Dry-run fixes** - Review before applying
-- **Rollback support** - Revert changes if needed
-
-## Contributing
-
-I welcome contributions! Please see our contributing guidelines for details.
+| User | Recommendation |
+|------|---------------|
+| Power Users / LTSC | ✅ Ready - Apply fixes selectively |
+| Sysadmins | ✅ Ready - Test in staging first |
+| Privacy Enthusiasts | ⚠️ Cautious - Use GUI read-only first, verify post-apply |
+| Home Users | ❌ Not recommended yet - Can break core features |
 
 ## License
 
-MIT License - see LICENSE file for details
-
-## Acknowledgments
-
-Built with:
-- [Rust](https://www.rust-lang.org/) - Systems programming language
-- [clap](https://github.com/clap-rs/clap) - Command-line argument parsing
-- [sysinfo](https://github.com/GuillaumeGomez/sysinfo) - System information
-- [serde](https://serde.rs/) - Serialization framework
-
-## Disclaimer
-
-CorpAudit is provided as-is for educational and informational purposes. Always review generated fixes before applying them. The authors are not responsible for any damage caused by using this tool.
-
-Note From Developer: This Is A AI Coded Tool.
-
-## Support
-
-- GitHub Issues: https://github.com/aidurr/CorpAudit/issues
-- Documentation: https://github.com/aidurr/CorpAudit/wiki
-
----
-
-**Take back control of your digital environment.**
+MIT

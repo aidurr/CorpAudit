@@ -67,83 +67,48 @@ impl Default for Config {
         let mut permission_patterns = HashMap::new();
         
         // Windows-specific permission patterns
-        #[cfg(windows)]
-        {
-            permission_patterns.insert(
-                "camera".to_string(),
-                vec![
-                    r"\Device\IoVideo".to_string(),
-                    r"\Device\HarddiskVolume".to_string(),
-                ],
-            );
-            permission_patterns.insert(
-                "microphone".to_string(),
-                vec![
-                    r"\Device\HarddiskVolume".to_string(),
-                    r"\Device\Audio".to_string(),
-                ],
-            );
-            permission_patterns.insert(
-                "location".to_string(),
-                vec![
-                    r"\Registry\MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor".to_string(),
-                ],
-            );
-            permission_patterns.insert(
-                "filesystem".to_string(),
-                vec![
-                    r"\Device\HarddiskVolume".to_string(),
-                    r"\??\C:\".to_string(),
-                    r"\??\D:\".to_string(),
-                ],
-            );
-            permission_patterns.insert(
-                "network".to_string(),
-                vec![
-                    r"\Device\Tcp".to_string(),
-                    r"\Device\Udp".to_string(),
-                    r"\Device\Afd".to_string(),
-                ],
-            );
-            permission_patterns.insert(
-                "clipboard".to_string(),
-                vec![
-                    r"\Clipboard".to_string(),
-                ],
-            );
-        }
-        
-        // Unix/Linux permission patterns
-        #[cfg(unix)]
-        {
-            permission_patterns.insert(
-                "camera".to_string(),
-                vec!["/dev/video".to_string(), "/dev/v4l".to_string()],
-            );
-            permission_patterns.insert(
-                "microphone".to_string(),
-                vec!["/dev/snd".to_string(), "/proc/asound".to_string()],
-            );
-            permission_patterns.insert(
-                "location".to_string(),
-                vec![
-                    "/proc/net/wireless".to_string(),
-                    "/proc/net/arp".to_string(),
-                ],
-            );
-            permission_patterns.insert(
-                "filesystem".to_string(),
-                vec!["/home".to_string(), "/root".to_string(), "/mnt".to_string()],
-            );
-            permission_patterns.insert(
-                "network".to_string(),
-                vec!["/proc/net".to_string(), "/sys/class/net".to_string()],
-            );
-            permission_patterns.insert(
-                "clipboard".to_string(),
-                vec!["/tmp/.X11-unix".to_string(), "/run/user".to_string()],
-            );
-        }
+        permission_patterns.insert(
+            "camera".to_string(),
+            vec![
+                r"\Device\IoVideo".to_string(),
+                r"\Device\HarddiskVolume".to_string(),
+            ],
+        );
+        permission_patterns.insert(
+            "microphone".to_string(),
+            vec![
+                r"\Device\HarddiskVolume".to_string(),
+                r"\Device\Audio".to_string(),
+            ],
+        );
+        permission_patterns.insert(
+            "location".to_string(),
+            vec![
+                r"\Registry\MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor".to_string(),
+            ],
+        );
+        permission_patterns.insert(
+            "filesystem".to_string(),
+            vec![
+                r"\Device\HarddiskVolume".to_string(),
+                r"\??\C:\".to_string(),
+                r"\??\D:\".to_string(),
+            ],
+        );
+        permission_patterns.insert(
+            "network".to_string(),
+            vec![
+                r"\Device\Tcp".to_string(),
+                r"\Device\Udp".to_string(),
+                r"\Device\Afd".to_string(),
+            ],
+        );
+        permission_patterns.insert(
+            "clipboard".to_string(),
+            vec![
+                r"\Clipboard".to_string(),
+            ],
+        );
 
         let mut alternatives = HashMap::new();
         alternatives.insert(

@@ -11,9 +11,11 @@ mod baseline;
 mod blocker;
 mod comparison;
 mod config;
+mod export;
 mod fix;
 mod gui;
 mod history;
+mod manifest;
 mod monitor;
 mod scanner;
 mod scheduler;
@@ -30,7 +32,9 @@ use audit::AuditReport;
 use baseline::BaselineManager;
 use comparison::DiffEngine;
 use config::Config;
+use export::export_report;
 use history::HistoryManager;
+use manifest::FixManifest;
 use monitor::{Monitor, MonitorConfig};
 use scanner::Scanner;
 use scheduler::Scheduler;
@@ -226,6 +230,30 @@ struct Args {
     /// Launch GUI
     #[arg(long)]
     gui: bool,
+
+    // === Export ===
+    /// Export report to file (json or html)
+    #[arg(long)]
+    export_report: Option<String>,
+
+    /// Export format (json/html)
+    #[arg(long, default_value = "json")]
+    export_format: String,
+
+    // === System Restore ===
+    /// Create system restore point before applying fixes
+    #[arg(long)]
+    restore_point: bool,
+
+    // === Fix Manifest ===
+    /// Generate fix manifest (safe/unsafe classification)
+    #[arg(long)]
+    fix_manifest: bool,
+
+    // === Version Detection ===
+    /// Show Windows version and telemetry profile
+    #[arg(long)]
+    version_info: bool,
 }
 
 fn main() {
@@ -410,6 +438,17 @@ fn main() {
         process::exit(0);
     }
 
+    // Version info
+    if args.version_info {
+        match show_version_info() {
+            Ok(_) => process::exit(0),
+            Err(e) => {
+                error!("Failed to get version info: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+
     // Monitoring mode
     if args.monitor {
         match run_monitor(&args) {
@@ -548,6 +587,23 @@ fn run_audit(args: &Args) -> Result<AuditReport> {
     // Apply fixes if requested
     if args.apply && !args.safe {
         if let Some(ref fixes) = report.fixes {
+            // Create restore point if requested
+            if args.restore_point {
+                info!("Creating system restore point...");
+                #[cfg(windows)]
+                {
+                    match windows::version::create_system_restore_point("Pre-CorpAudit Fix Application") {
+                        Ok(true) => info!("✓ System restore point created successfully"),
+                        Ok(false) => warn!("⚠ Failed to create restore point - continuing anyway"),
+                        Err(e) => warn!("⚠ Restore point error: {} - continuing anyway", e),
+                    }
+                }
+                #[cfg(not(windows))]
+                {
+                    warn!("System restore points only supported on Windows");
+                }
+            }
+
             info!("Applying fixes...");
             fix::apply_fixes(fixes)?;
         }
@@ -556,6 +612,33 @@ fn run_audit(args: &Args) -> Result<AuditReport> {
     // Save to history
     if let Err(e) = save_to_history(&report) {
         warn!("Failed to save scan to history: {}", e);
+    }
+
+    // Export report if requested
+    if let Some(ref export_path) = args.export_report {
+        match export_report(&report, &args.export_format, export_path) {
+            Ok(_) => info!("Report exported to {}", export_path),
+            Err(e) => warn!("Failed to export report: {}", e),
+        }
+    }
+
+    // Generate fix manifest if requested
+    if args.fix_manifest {
+        if let Some(ref fixes) = report.fixes {
+            let manifest = FixManifest::generate(fixes);
+            let manifest_summary = manifest.to_summary();
+            println!("\n{}", manifest_summary);
+
+            // Also save to file
+            let manifest_path = "fix-manifest.json";
+            if let Ok(json) = serde_json::to_string_pretty(&manifest) {
+                if let Err(e) = std::fs::write(manifest_path, json) {
+                    warn!("Failed to write manifest file: {}", e);
+                } else {
+                    info!("Fix manifest saved to {}", manifest_path);
+                }
+            }
+        }
     }
 
     // Display privacy score if requested
@@ -883,6 +966,51 @@ fn browse_alternatives(search: &str) -> Result<()> {
             }
             println!();
         }
+    }
+
+    Ok(())
+}
+
+fn show_version_info() -> Result<()> {
+    #[cfg(windows)]
+    {
+        let win_version = windows::version::WindowsVersion::detect()?;
+
+        println!("\n{}", "Windows Version Information".cyan().bold());
+        println!("{}", "=".repeat(50));
+        println!("Edition: {}", win_version.edition);
+        println!("Build: {} ({}.{}.{})", win_version.build, win_version.major, win_version.minor, win_version.build);
+        println!("Display Version: {}", win_version.display_version);
+        println!("Windows 11: {}", if win_version.is_windows_11 { "Yes ✓" } else { "No ✗" });
+        println!();
+
+        if win_version.is_windows_11 {
+            println!("{}", "Telemetry Profile:".yellow().bold());
+            println!("{}", win_version.get_telemetry_profile());
+            println!();
+            println!("{}", "Recommended Actions:".yellow().bold());
+            for action in win_version.get_recommended_actions() {
+                println!("  • {}", action);
+            }
+        } else {
+            println!("{}", "Warning: CorpAudit is optimized for Windows 11".yellow().bold());
+            println!("Some fixes may not apply to Windows 10");
+        }
+        println!();
+
+        // Readiness verdict
+        println!("{}", "Readiness Verdict:".green().bold());
+        if win_version.build >= 22000 {
+            println!("  ✅ System ready for CorpAudit Windows 11 features");
+        } else {
+            println!("  ⚠️ Windows 10 detected - limited feature support");
+        }
+        println!();
+    }
+
+    #[cfg(not(windows))]
+    {
+        println!("{}", "Version detection only available on Windows".yellow());
     }
 
     Ok(())

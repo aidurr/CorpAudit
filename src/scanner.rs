@@ -3,10 +3,6 @@ use crate::config::Config;
 use crate::startup;
 use anyhow::Result;
 use std::collections::HashMap;
-#[cfg(unix)]
-use std::collections::HashSet;
-#[cfg(unix)]
-use std::fs;
 use std::process::Command;
 use sysinfo::System;
 
@@ -368,27 +364,6 @@ impl Scanner {
     fn get_process_connections(&self, pid: u32) -> Result<Option<Vec<NetworkConnection>>> {
         let mut connections = Vec::new();
 
-        #[cfg(unix)]
-        {
-            let tcp_path = format!("/proc/{}/net/tcp", pid);
-            if let Ok(content) = fs::read_to_string(&tcp_path) {
-                for line in content.lines().skip(1) {
-                    if let Some(conn) = parse_tcp_line(line) {
-                        connections.push(conn);
-                    }
-                }
-            }
-
-            let udp_path = format!("/proc/{}/net/udp", pid);
-            if let Ok(content) = fs::read_to_string(&udp_path) {
-                for line in content.lines().skip(1) {
-                    if let Some(conn) = parse_udp_line(line) {
-                        connections.push(conn);
-                    }
-                }
-            }
-        }
-
         #[cfg(windows)]
         {
             if let Ok(conns) = windows::network::get_process_connections(pid) {
@@ -429,48 +404,13 @@ impl Scanner {
         Ok(dependencies)
     }
 
-    #[cfg(unix)]
-    fn check_process_permissions(
-        &self,
-        pid: u32,
-        patterns: &HashMap<String, Vec<String>>,
-    ) -> Result<Vec<Permission>> {
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut permissions: Vec<Permission> = Vec::new();
-
-        let fd_path = format!("/proc/{}/fd", pid);
-        if let Ok(entries) = fs::read_dir(&fd_path) {
-            for entry in entries.flatten() {
-                if let Ok(link) = fs::read_link(entry.path()) {
-                    let link_str = link.to_string_lossy();
-
-                    for (perm_type, perm_patterns) in patterns {
-                        for pattern in perm_patterns {
-                            if link_str.contains(pattern) {
-                                let key = format!("{}:{}", perm_type, link_str);
-                                if seen.insert(key) {
-                                    permissions.push(Permission {
-                                        permission_type: perm_type.clone(),
-                                        description: format!("Accessing: {}", link_str),
-                                        granted: true,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(permissions)
-    }
-
-    #[cfg(windows)]
     fn check_process_permissions(
         &self,
         _pid: u32,
         _patterns: &HashMap<String, Vec<String>>,
     ) -> Result<Vec<Permission>> {
+        // Windows permission checking requires advanced APIs
+        // TODO: Implement using Windows Security API in future
         Ok(Vec::new())
     }
 
@@ -612,44 +552,19 @@ impl Scanner {
 }
 
 fn is_system_process(process_name: &str) -> bool {
-    #[cfg(unix)]
-    {
-        let system_processes = vec![
-            "systemd",
-            "init",
-            "kthreadd",
-            "ksoftirqd",
-            "migration",
-            "rcu_",
-            "watchdog",
-            "kworker",
-            "kswapd",
-            "ksmd",
-            "khugepaged",
-        ];
-        system_processes.iter().any(|p| process_name.starts_with(p))
-    }
-    #[cfg(windows)]
-    {
-        let system_processes = vec![
-            "System",
-            "smss.exe",
-            "csrss.exe",
-            "wininit.exe",
-            "services.exe",
-            "lsass.exe",
-            "svchost.exe",
-            "winlogon.exe",
-            "dwm.exe",
-            "explorer.exe",
-        ];
-        system_processes.iter().any(|p| process_name == *p)
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = process_name;
-        false
-    }
+    let system_processes = vec![
+        "System",
+        "smss.exe",
+        "csrss.exe",
+        "wininit.exe",
+        "services.exe",
+        "lsass.exe",
+        "svchost.exe",
+        "winlogon.exe",
+        "dwm.exe",
+        "explorer.exe",
+    ];
+    system_processes.iter().any(|p| process_name == *p)
 }
 
 fn is_known_safe_process(process_name: &str) -> bool {
@@ -819,25 +734,6 @@ fn is_telemetry_connection(conn: &NetworkConnection, telemetry_domains: &[String
 
 fn resolve_domain(address: &str) -> Option<String> {
     if address.parse::<std::net::IpAddr>().is_ok() {
-        #[cfg(unix)]
-        {
-            Command::new("dig")
-                .args(["-x", address, "+short"])
-                .output()
-                .ok()
-                .and_then(|o| String::from_utf8(o.stdout).ok())
-                .and_then(|s| {
-                    let trimmed = s.trim();
-                    if trimmed.is_empty() {
-                        // Fallback: return the IP address if dig fails or returns empty
-                        Some(address.to_string())
-                    } else {
-                        Some(trimmed.to_string())
-                    }
-                })
-                // Fallback if dig command fails entirely
-                .or_else(|| Some(address.to_string()))
-        }
         #[cfg(windows)]
         {
             Command::new("nslookup")
@@ -854,12 +750,10 @@ fn resolve_domain(address: &str) -> Option<String> {
                                 .map(|s| s.trim().trim_end_matches('.').to_string())
                         })
                 })
-                // Fallback: return the IP address if nslookup fails
                 .or_else(|| Some(address.to_string()))
         }
-        #[cfg(not(any(unix, windows)))]
+        #[cfg(not(windows))]
         {
-            // Fallback for unknown platforms: just return the address
             Some(address.to_string())
         }
     } else {
@@ -867,96 +761,4 @@ fn resolve_domain(address: &str) -> Option<String> {
     }
 }
 
-#[allow(dead_code)]
-fn parse_tcp_line(line: &str) -> Option<NetworkConnection> {
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.len() < 4 {
-        return None;
-    }
-
-    let local_addr = parse_socket_address(parts[1])?;
-    let remote_addr = parse_socket_address(parts[2])?;
-
-    Some(NetworkConnection {
-        local_address: local_addr.0,
-        local_port: local_addr.1,
-        remote_address: remote_addr.0,
-        remote_port: remote_addr.1,
-        protocol: "TCP".to_string(),
-        state: parts[3].to_string(),
-        data_sent: None,
-        data_received: None,
-    })
-}
-
-#[allow(dead_code)]
-fn parse_udp_line(line: &str) -> Option<NetworkConnection> {
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.len() < 4 {
-        return None;
-    }
-
-    let local_addr = parse_socket_address(parts[1])?;
-    let remote_addr = parse_socket_address(parts[2])?;
-
-    Some(NetworkConnection {
-        local_address: local_addr.0,
-        local_port: local_addr.1,
-        remote_address: remote_addr.0,
-        remote_port: remote_addr.1,
-        protocol: "UDP".to_string(),
-        state: parts[3].to_string(),
-        data_sent: None,
-        data_received: None,
-    })
-}
-
-#[allow(dead_code)]
-fn parse_socket_address(addr: &str) -> Option<(String, u16)> {
-    let colon_pos = addr.rfind(':')?;
-    let ip_hex = &addr[..colon_pos];
-    let port_hex = &addr[colon_pos + 1..];
-
-    let ip = if ip_hex.contains(':') {
-        hex_to_ipv6(ip_hex)?
-    } else {
-        hex_to_ip(ip_hex)?
-    };
-    let port = u16::from_str_radix(port_hex, 16).ok()?;
-
-    Some((ip, port))
-}
-
-#[allow(dead_code)]
-fn hex_to_ip(hex: &str) -> Option<String> {
-    if hex.len() != 8 {
-        return None;
-    }
-
-    let mut octets = [0u8; 4];
-    for i in 0..4 {
-        let start = i * 2;
-        octets[3 - i] = u8::from_str_radix(&hex[start..start + 2], 16).ok()?;
-    }
-
-    Some(format!(
-        "{}.{}.{}.{}",
-        octets[0], octets[1], octets[2], octets[3]
-    ))
-}
-
-#[allow(dead_code)]
-fn hex_to_ipv6(hex: &str) -> Option<String> {
-    if hex.len() != 32 {
-        return None;
-    }
-
-    let mut groups = Vec::new();
-    for i in 0..8 {
-        let start = i * 4;
-        let group = u16::from_str_radix(&hex[start..start + 4], 16).ok()?;
-        groups.push(format!("{:x}", group));
-    }
-
-    Some(groups.join(":"))
-}
+// Network connection analysis

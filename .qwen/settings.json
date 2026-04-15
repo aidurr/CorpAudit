@@ -5,7 +5,8 @@
       "Bash(cargo build *)",
       "Bash(findstr *)",
       "Bash(.\\target\\release\\corpaudit.exe *)",
-      "Bash(type *)"
+      "Bash(type *)",
+      "Bash(del *)"
     ]
   },
   "$version": 3
