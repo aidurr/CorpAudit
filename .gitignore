@@ -23,6 +23,8 @@ Thumbs.db
 *.tmp
 *.temp
 .kilo/
+.qwen/
+.github/
 IMPLEMENTATION_SUMMARY.md
 PROJECT_SUMMARY.md
 QUICKSTART.md
