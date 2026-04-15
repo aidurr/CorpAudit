@@ -9,6 +9,14 @@ repository = "https://github.com/aidurr/corpaudit"
 keywords = ["privacy", "security", "audit", "telemetry", "bloat"]
 categories = ["command-line-utilities", "system-tools"]
 
+[[bin]]
+name = "corpaudit"
+path = "src/main.rs"
+
+[[bin]]
+name = "corpaudit-gui"
+path = "src/gui.rs"
+
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -24,6 +32,8 @@ tempfile = "3.10"
 gethostname = "0.5"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 unicode-width = "0.1"
+egui = "0.29"
+eframe = "0.29"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

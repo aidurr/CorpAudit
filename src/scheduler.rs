@@ -147,6 +147,7 @@ impl Scheduler {
             return Err(anyhow::anyhow!("Windows Task Scheduler integration not yet implemented. Please create a scheduled task manually."));
         }
 
+        #[cfg(unix)]
         Ok(())
     }
 

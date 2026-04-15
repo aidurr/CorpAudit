@@ -781,6 +781,7 @@ pub struct StartupReport {
 }
 
 impl StartupReport {
+    #[allow(dead_code)]
     pub fn has_critical(&self) -> bool {
         self.findings
             .iter()

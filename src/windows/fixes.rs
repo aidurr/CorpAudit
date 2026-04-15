@@ -2,6 +2,7 @@
 use crate::audit::{BloatFinding, Fix, PermissionsFinding, TelemetryFinding};
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn generate_windows_telemetry_fix(finding: &TelemetryFinding) -> Option<Fix> {
     let process_name = &finding.process_name;
 
@@ -127,6 +128,7 @@ pub fn generate_windows_telemetry_fix(finding: &TelemetryFinding) -> Option<Fix>
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn generate_windows_bloat_fix(finding: &BloatFinding) -> Option<Fix> {
     let process_name = &finding.process_name;
 
@@ -146,6 +148,7 @@ pub fn generate_windows_bloat_fix(finding: &BloatFinding) -> Option<Fix> {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn generate_windows_permissions_fix(finding: &PermissionsFinding) -> Option<Fix> {
     let process_name = &finding.process_name;
 

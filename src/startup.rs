@@ -192,6 +192,7 @@ impl StartupScanner {
         Ok(findings)
     }
 
+    #[allow(dead_code)]
     fn assess_service_severity(service_name: &str) -> Severity {
         let known_telemetry_services = [
             "telemetry",

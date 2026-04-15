@@ -46,6 +46,7 @@ impl BaselineManager {
         Ok(Some(report))
     }
 
+    #[allow(dead_code)]
     pub fn delete_baseline(&self) -> Result<()> {
         if self.baseline_path.exists() {
             fs::remove_file(&self.baseline_path).context("Failed to delete baseline")?;

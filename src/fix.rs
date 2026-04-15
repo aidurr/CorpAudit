@@ -71,6 +71,14 @@ pub fn apply_fixes(fixes: &[Fix]) -> Result<()> {
 }
 
 fn apply_fix(fix: &Fix) -> Result<()> {
+    // SAFETY GUARD: Never apply unsafe fixes without explicit confirmation
+    if !fix.safe {
+        warn!("⚠ Fix '{}' is marked as UNSAFE. Skipping automatic application.", fix.title);
+        warn!("  This fix requires manual review and administrator privileges.");
+        warn!("  Review the fix commands and apply manually if appropriate.");
+        return Ok(());
+    }
+
     // Create a temporary file for the fix script
     #[cfg(unix)]
     let temp_file = NamedTempFile::new().context("Failed to create temporary file")?;
@@ -85,16 +93,19 @@ fn apply_fix(fix: &Fix) -> Result<()> {
     #[cfg(unix)]
     {
         script_content.push_str("#!/bin/bash\n");
+        script_content.push_str("set -euo pipefail\n\n");  // Fail fast, treat unset vars as error
     }
 
     #[cfg(windows)]
     {
         script_content.push_str("@echo off\n");
+        script_content.push_str("setlocal EnableDelayedExpansion\n\n");
     }
 
     script_content.push_str("# CorpAudit Fix Script\n");
     script_content.push_str(&format!("# Fix: {}\n", fix.title));
     script_content.push_str(&format!("# Description: {}\n", fix.description));
+    script_content.push_str(&format!("# Safety: {}\n", if fix.safe { "Safe" } else { "UNSAFE - Requires Review" }));
     script_content.push_str("\n");
 
     for cmd in &fix.commands {
@@ -113,9 +124,10 @@ fn apply_fix(fix: &Fix) -> Result<()> {
         fs::set_permissions(temp_file.path(), perms)?;
     }
 
-    // Execute the fix script
+    // Execute the fix script with appropriate shell
     #[cfg(unix)]
-    let output = Command::new(temp_file.path())
+    let output = Command::new("bash")
+        .arg(temp_file.path())
         .output()
         .context("Failed to execute fix script")?;
 
@@ -127,7 +139,13 @@ fn apply_fix(fix: &Fix) -> Result<()> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Fix script failed: {}", stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        anyhow::bail!(
+            "Fix script failed (exit code {})\nstdout: {}\nstderr: {}",
+            output.status,
+            stdout,
+            stderr
+        );
     }
 
     Ok(())
@@ -141,6 +159,76 @@ fn generate_telemetry_fix(finding: &TelemetryFinding, safe: bool) -> Option<Fix>
 
     // Generate commands based on the process
     match process_name.to_lowercase().as_str() {
+        // Windows telemetry
+        name if name == "windows" || finding.pid == 0 => {
+            // Check if this is a registry-based telemetry finding
+            if finding.domains.iter().any(|d| d.contains("Registry")) {
+                commands.push(format!(
+                    "# Disable Windows telemetry via registry (requires admin)\n\
+                     # IMPORTANT: This requires administrator privileges\n\
+                     # Backup current settings before making changes\n\
+                     \n\
+                     # Set AllowTelemetry to 0 (Security/Enterprise only)\n\
+                     reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection\" /v AllowTelemetry /t REG_DWORD /d 0 /f\n\
+                     \n\
+                     # Disable diagnostic tracking\n\
+                     reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection\" /v AllowDeviceNameInTelemetry /t REG_DWORD /d 0 /f\n\
+                     \n\
+                     # Note: Some settings require Windows Enterprise or Education edition"
+                ));
+
+                rollback_commands.push(format!(
+                    "# Restore Windows telemetry settings\n\
+                     reg delete \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection\" /v AllowTelemetry /f\n\
+                     reg delete \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection\" /v AllowDeviceNameInTelemetry /f"
+                ));
+            } else if finding.domains.iter().any(|d| d.contains("Service")) {
+                commands.push(format!(
+                    "# Disable Windows telemetry services (requires admin)\n\
+                     # WARNING: This may affect system functionality\n\
+                     \n\
+                     # Stop and disable Connected User Experiences and Telemetry\n\
+                     sc stop DiagTrack\n\
+                     sc config DiagTrack start= disabled\n\
+                     \n\
+                     # Stop and disable WAP Push service\n\
+                     sc stop dmwappushservice\n\
+                     sc config dmwappushservice start= disabled\n\
+                     \n\
+                     # Note: Services can be re-enabled by changing 'disabled' to 'auto'"
+                ));
+
+                rollback_commands.push(format!(
+                    "# Re-enable Windows telemetry services\n\
+                     sc config DiagTrack start= auto\n\
+                     sc start DiagTrack\n\
+                     sc config dmwappushservice start= demand\n\
+                     sc start dmwappushservice"
+                ));
+            } else if finding.domains.iter().any(|d| d.contains("Task")) {
+                commands.push(format!(
+                    "# Disable telemetry scheduled tasks (requires admin)\n\
+                     \n\
+                     # Disable Customer Experience Improvement Program tasks\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator\" /Disable\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip\" /Disable\n\
+                     \n\
+                     # Disable Application Experience tasks\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser\" /Disable\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Application Experience\\ProgramDataUpdater\" /Disable\n\
+                     \n\
+                     # Note: Tasks can be re-enabled with /Enable flag"
+                ));
+
+                rollback_commands.push(format!(
+                    "# Re-enable telemetry scheduled tasks\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator\" /Enable\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip\" /Enable\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser\" /Enable\n\
+                     schtasks /Change /TN \"Microsoft\\Windows\\Application Experience\\ProgramDataUpdater\" /Enable"
+                ));
+            }
+        }
         name if name.contains("chrome") => {
             commands.push(format!(
                 "# Disable Chrome telemetry\n\
@@ -487,6 +575,7 @@ fn generate_permissions_fix(finding: &PermissionsFinding, safe: bool) -> Option<
     })
 }
 
+#[allow(dead_code)]
 pub fn create_fix_script(fixes: &[Fix], output_path: &PathBuf) -> Result<()> {
     let mut script_content = String::new();
 

@@ -4,7 +4,8 @@
       "Bash(select-object *)",
       "Bash(cargo build *)",
       "Bash(findstr *)",
-      "Bash(.\\target\\release\\corpaudit.exe *)"
+      "Bash(.\\target\\release\\corpaudit.exe *)",
+      "Bash(type *)"
     ]
   },
   "$version": 3

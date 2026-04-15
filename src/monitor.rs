@@ -67,6 +67,7 @@ pub struct MonitorEvent {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum MonitorEventType {
     NewTelemetryDetected,
     TelemetryRemoved,

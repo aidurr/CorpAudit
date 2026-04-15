@@ -374,6 +374,7 @@ impl TrafficVisualizer {
         )
     }
 
+    #[allow(dead_code)]
     pub fn render_sparkline(values: &[u64]) -> String {
         if values.is_empty() {
             return "No data".to_string();

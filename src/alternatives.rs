@@ -42,6 +42,7 @@ impl AlternativesDb {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn list_all(&self) -> &[AlternativeEntry] {
         &self.entries
     }

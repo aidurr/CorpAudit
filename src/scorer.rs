@@ -48,6 +48,7 @@ impl PrivacyGrade {
         }
     }
 
+    #[allow(dead_code)]
     pub fn color_name(&self) -> &'static str {
         match self {
             PrivacyGrade::APlus | PrivacyGrade::A => "green",
@@ -429,14 +430,14 @@ impl PrivacyScorer {
         for (category, subscore) in subscores.iter() {
             if *subscore < 50.0 {
                 recommendations.push(format!(
-                    "{} score is critically low ({:.0}/100). Apply fixes for {} issues.",
+                    "🚨 {} score is critically low ({:.0}/100).\n   → Apply fixes for {} issues immediately.",
                     category,
                     subscore,
                     category.to_lowercase()
                 ));
             } else if *subscore < 70.0 {
                 recommendations.push(format!(
-                    "{} score is below average ({:.0}/100). Consider addressing {} issues.",
+                    "⚠ {} score is below average ({:.0}/100).\n   → Consider addressing {} issues.",
                     category,
                     subscore,
                     category.to_lowercase()
@@ -444,29 +445,67 @@ impl PrivacyScorer {
             }
         }
 
+        // Specific recommendations based on threat model
+        match score.scoring_metadata.threat_model {
+            ThreatModel::Paranoid => {
+                if score.telemetry_subscore < 80.0 {
+                    recommendations.push(
+                        "🔒 Paranoid mode: Consider disabling all telemetry at the network level\n   → Use firewall rules to block telemetry domains".to_string()
+                    );
+                }
+                if score.permissions_subscore < 80.0 {
+                    recommendations.push(
+                        "🔒 Paranoid mode: Review all application permissions\n   → Use sandboxing tools like Firejail or Windows AppContainer".to_string()
+                    );
+                }
+            }
+            ThreatModel::Enterprise => {
+                if score.network_subscore < 80.0 {
+                    recommendations.push(
+                        "🏢 Enterprise: Review network traffic patterns for compliance\n   → Implement network segmentation and monitoring".to_string()
+                    );
+                }
+                if score.data_exposure_subscore < 80.0 {
+                    recommendations.push(
+                        "🏢 Enterprise: Audit data exposure points\n   → Review DLP policies and encryption standards".to_string()
+                    );
+                }
+            }
+            ThreatModel::Gaming => {
+                if score.bloat_subscore < 80.0 {
+                    recommendations.push(
+                        "🎮 Gaming: Optimize background processes for performance\n   → Disable unnecessary overlays and launchers".to_string()
+                    );
+                }
+            }
+            _ => {}
+        }
+
         // Grade-specific recommendations
         match score.grade {
             PrivacyGrade::F => {
                 recommendations.push(
-                    "Your privacy score is critically low. Immediate action recommended."
-                        .to_string(),
+                    "🚨 Your privacy score is critically low. Immediate action recommended.\n   → Review and apply ALL critical fixes, then rescan.".to_string(),
                 );
             }
             PrivacyGrade::D => {
                 recommendations.push(
-                    "Significant privacy issues detected. Review and apply recommended fixes."
-                        .to_string(),
+                    "⚠ Significant privacy issues detected.\n   → Review and apply recommended fixes prioritizing critical items.".to_string(),
                 );
             }
             PrivacyGrade::C => {
                 recommendations.push(
-                    "Moderate privacy issues detected. Consider applying fixes to improve score."
-                        .to_string(),
+                    "⚡ Moderate privacy issues detected.\n   → Consider applying fixes to improve score, focusing on lowest-scoring categories.".to_string(),
                 );
             }
-            _ => {
+            PrivacyGrade::B => {
                 recommendations.push(
-                    "Good privacy posture maintained. Continue monitoring for changes.".to_string(),
+                    "✓ Good privacy posture with room for improvement.\n   → Address remaining medium-severity issues for better protection.".to_string(),
+                );
+            }
+            PrivacyGrade::A | PrivacyGrade::APlus => {
+                recommendations.push(
+                    "✓✓ Excellent privacy posture maintained.\n   → Continue monitoring for changes and keep software updated.".to_string(),
                 );
             }
         }
@@ -474,6 +513,7 @@ impl PrivacyScorer {
         recommendations
     }
 
+    #[allow(dead_code)]
     pub fn calculate_improvement_potential(score: &PrivacyScore) -> f64 {
         // Calculate max possible score if all fixes applied
         // This is a simplified estimation

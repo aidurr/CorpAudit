@@ -73,6 +73,7 @@ impl HistoryManager {
         })
     }
 
+    #[allow(dead_code)]
     pub fn with_retention_days(mut self, days: u32) -> Self {
         self.retention_days = days;
         self
@@ -205,11 +206,13 @@ impl HistoryManager {
         })
     }
 
+    #[allow(dead_code)]
     pub fn get_comparison_dates(&self) -> Result<Vec<String>> {
-        let histories = self.load_history(365)?; // Last year
+        let histories = self.load_history(365)?;
         Ok(histories.iter().map(|h| h.timestamp.clone()).collect())
     }
 
+    #[allow(dead_code)]
     pub fn load_scan_by_id(&self, scan_id: &str) -> Result<Option<ScanHistory>> {
         let file_path = self.history_dir.join(format!("{}.json", scan_id));
 

@@ -65,33 +65,85 @@ impl Default for Config {
         ];
 
         let mut permission_patterns = HashMap::new();
-        permission_patterns.insert(
-            "camera".to_string(),
-            vec!["/dev/video".to_string(), "/dev/v4l".to_string()],
-        );
-        permission_patterns.insert(
-            "microphone".to_string(),
-            vec!["/dev/snd".to_string(), "/proc/asound".to_string()],
-        );
-        permission_patterns.insert(
-            "location".to_string(),
-            vec![
-                "/proc/net/wireless".to_string(),
-                "/proc/net/arp".to_string(),
-            ],
-        );
-        permission_patterns.insert(
-            "filesystem".to_string(),
-            vec!["/home".to_string(), "/root".to_string(), "/mnt".to_string()],
-        );
-        permission_patterns.insert(
-            "network".to_string(),
-            vec!["/proc/net".to_string(), "/sys/class/net".to_string()],
-        );
-        permission_patterns.insert(
-            "clipboard".to_string(),
-            vec!["/tmp/.X11-unix".to_string(), "/run/user".to_string()],
-        );
+        
+        // Windows-specific permission patterns
+        #[cfg(windows)]
+        {
+            permission_patterns.insert(
+                "camera".to_string(),
+                vec![
+                    r"\Device\IoVideo".to_string(),
+                    r"\Device\HarddiskVolume".to_string(),
+                ],
+            );
+            permission_patterns.insert(
+                "microphone".to_string(),
+                vec![
+                    r"\Device\HarddiskVolume".to_string(),
+                    r"\Device\Audio".to_string(),
+                ],
+            );
+            permission_patterns.insert(
+                "location".to_string(),
+                vec![
+                    r"\Registry\MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor".to_string(),
+                ],
+            );
+            permission_patterns.insert(
+                "filesystem".to_string(),
+                vec![
+                    r"\Device\HarddiskVolume".to_string(),
+                    r"\??\C:\".to_string(),
+                    r"\??\D:\".to_string(),
+                ],
+            );
+            permission_patterns.insert(
+                "network".to_string(),
+                vec![
+                    r"\Device\Tcp".to_string(),
+                    r"\Device\Udp".to_string(),
+                    r"\Device\Afd".to_string(),
+                ],
+            );
+            permission_patterns.insert(
+                "clipboard".to_string(),
+                vec![
+                    r"\Clipboard".to_string(),
+                ],
+            );
+        }
+        
+        // Unix/Linux permission patterns
+        #[cfg(unix)]
+        {
+            permission_patterns.insert(
+                "camera".to_string(),
+                vec!["/dev/video".to_string(), "/dev/v4l".to_string()],
+            );
+            permission_patterns.insert(
+                "microphone".to_string(),
+                vec!["/dev/snd".to_string(), "/proc/asound".to_string()],
+            );
+            permission_patterns.insert(
+                "location".to_string(),
+                vec![
+                    "/proc/net/wireless".to_string(),
+                    "/proc/net/arp".to_string(),
+                ],
+            );
+            permission_patterns.insert(
+                "filesystem".to_string(),
+                vec!["/home".to_string(), "/root".to_string(), "/mnt".to_string()],
+            );
+            permission_patterns.insert(
+                "network".to_string(),
+                vec!["/proc/net".to_string(), "/sys/class/net".to_string()],
+            );
+            permission_patterns.insert(
+                "clipboard".to_string(),
+                vec!["/tmp/.X11-unix".to_string(), "/run/user".to_string()],
+            );
+        }
 
         let mut alternatives = HashMap::new();
         alternatives.insert(
@@ -194,12 +246,38 @@ impl Config {
         self.cpu_threshold_percent
     }
 
+    #[allow(dead_code)]
     pub fn get_startup_threshold_ms(&self) -> u64 {
         self.startup_threshold_ms
     }
 
     pub fn get_permission_patterns(&self) -> &HashMap<String, Vec<String>> {
         &self.permission_patterns
+    }
+
+    #[allow(dead_code)]
+    pub fn add_telemetry_domain(&mut self, domain: String) {
+        self.telemetry_domains.push(domain);
+    }
+
+    #[allow(dead_code)]
+    pub fn add_alternative(&mut self, process_name: String, alternative: String) {
+        self.alternatives.insert(process_name, alternative);
+    }
+
+    #[allow(dead_code)]
+    pub fn set_memory_threshold(&mut self, threshold_mb: f64) {
+        self.memory_threshold_mb = threshold_mb;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_cpu_threshold(&mut self, threshold_percent: f64) {
+        self.cpu_threshold_percent = threshold_percent;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_startup_threshold(&mut self, threshold_ms: u64) {
+        self.startup_threshold_ms = threshold_ms;
     }
 
     pub fn get_alternative(&self, process_name: &str) -> Option<String> {
@@ -210,28 +288,6 @@ impl Config {
             }
         }
         None
-    }
-
-    pub fn add_telemetry_domain(&mut self, domain: String) {
-        if !self.telemetry_domains.contains(&domain) {
-            self.telemetry_domains.push(domain);
-        }
-    }
-
-    pub fn add_alternative(&mut self, process_name: String, alternative: String) {
-        self.alternatives.insert(process_name, alternative);
-    }
-
-    pub fn set_memory_threshold(&mut self, threshold_mb: f64) {
-        self.memory_threshold_mb = threshold_mb;
-    }
-
-    pub fn set_cpu_threshold(&mut self, threshold_percent: f64) {
-        self.cpu_threshold_percent = threshold_percent;
-    }
-
-    pub fn set_startup_threshold(&mut self, threshold_ms: u64) {
-        self.startup_threshold_ms = threshold_ms;
     }
 
     pub fn is_process_whitelisted(&self, process_name: &str) -> bool {

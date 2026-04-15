@@ -12,6 +12,7 @@ mod blocker;
 mod comparison;
 mod config;
 mod fix;
+mod gui;
 mod history;
 mod monitor;
 mod scanner;
@@ -221,6 +222,10 @@ struct Args {
     /// Launch interactive TUI dashboard
     #[arg(long)]
     dashboard: bool,
+
+    /// Launch GUI
+    #[arg(long)]
+    gui: bool,
 }
 
 fn main() {
@@ -394,6 +399,15 @@ fn main() {
     // Print banner
     if !args.quiet && !args.monitor {
         print_banner();
+    }
+
+    // GUI mode
+    if args.gui {
+        if let Err(e) = gui::run_gui() {
+            error!("GUI failed: {}", e);
+            process::exit(1);
+        }
+        process::exit(0);
     }
 
     // Monitoring mode

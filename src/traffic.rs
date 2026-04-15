@@ -75,12 +75,14 @@ pub struct ProtocolBreakdown {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct TrafficTimeline {
     pub process_name: String,
     pub data_points: Vec<TrafficDataPoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct TrafficDataPoint {
     pub timestamp: String,
     pub bytes_sent: u64,

@@ -2,9 +2,13 @@ use crate::audit::*;
 use crate::config::Config;
 use crate::startup;
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::process::Command;
 use sysinfo::System;
+
+#[cfg(windows)]
+use crate::windows;
 
 pub struct Scanner {
     config: Config,
@@ -45,6 +49,25 @@ impl Scanner {
         };
 
         let telemetry_domains = self.config.get_telemetry_domains();
+
+        #[cfg(windows)]
+        {
+            let win_telemetry = windows::telemetry::WindowsTelemetryDetector::new();
+            if let Ok(reg_findings) = win_telemetry.check_registry_telemetry() {
+                for f in reg_findings {
+                    if f.severity >= self.min_severity {
+                        summary.total += 1;
+                        match f.severity {
+                            Severity::Critical => summary.critical += 1,
+                            Severity::High => summary.high += 1,
+                            Severity::Medium => summary.medium += 1,
+                            Severity::Low => summary.low += 1,
+                        }
+                        findings.push(f);
+                    }
+                }
+            }
+        }
 
         for (pid, process) in self.system.processes() {
             let process_name = process.name().to_string_lossy().to_string();
@@ -145,6 +168,13 @@ impl Scanner {
         let memory_threshold_mb = self.config.get_memory_threshold_mb();
         let cpu_threshold_percent = self.config.get_cpu_threshold_percent();
 
+        let logical_cores = self
+            .system
+            .physical_core_count()
+            .unwrap_or(self.system.cpus().len().max(1)) as f64;
+
+        let mut process_families: HashMap<String, Vec<(u32, String, f64, f64)>> = HashMap::new();
+
         for (pid, process) in self.system.processes() {
             let process_name = process.name().to_string_lossy().to_string();
 
@@ -156,45 +186,109 @@ impl Scanner {
                 continue;
             }
 
-            let memory_mb = process.memory() as f64 / 1_048_576.0; // Convert bytes to MB
-            let cpu_percent = process.cpu_usage() as f64;
+            if is_known_safe_process(&process_name) {
+                continue;
+            }
 
-            let dependencies = self.get_process_dependencies(pid.as_u32())?;
+            let memory_mb = process.memory() as f64 / 1_048_576.0;
+            let cpu_percent = (process.cpu_usage() as f64 / logical_cores).min(100.0);
 
-            let is_bloated = memory_mb > memory_threshold_mb || cpu_percent > cpu_threshold_percent;
+            let family_key = get_process_family(&process_name);
+            process_families.entry(family_key).or_default().push((
+                pid.as_u32(),
+                process_name,
+                memory_mb,
+                cpu_percent,
+            ));
+        }
 
-            if is_bloated {
-                let severity = self.determine_bloat_severity(memory_mb, cpu_percent);
+        for (_family_key, members) in process_families {
+            let is_multiprocess_family = members.len() > 1;
 
-                if severity >= self.min_severity {
-                    let alternative = self.config.get_alternative(&process_name);
+            let total_memory: f64 = members.iter().map(|(_, _, m, _)| *m).sum();
+            let max_cpu: f64 = members
+                .iter()
+                .map(|(_, _, _, c)| *c)
+                .fold(0.0_f64, f64::max);
+            let total_cpu: f64 = members.iter().map(|(_, _, _, c)| *c).sum();
 
-                    let finding = BloatFinding {
-                        process_name: process_name.clone(),
-                        pid: pid.as_u32(),
-                        memory_mb,
-                        cpu_percent,
-                        startup_time_ms: 0,
-                        dependencies,
-                        severity,
-                        description: self.get_bloat_description(
-                            &process_name,
+            if is_multiprocess_family {
+                let primary = &members[0];
+                let is_bloated = total_memory > memory_threshold_mb * 2.0
+                    || (total_cpu > cpu_threshold_percent * 1.5 && max_cpu > 30.0);
+
+                if is_bloated {
+                    let severity = self.determine_bloat_severity(total_memory, max_cpu);
+                    if severity >= self.min_severity {
+                        let description = format!(
+                            "{} (multi-process family, {} processes) uses {:.2} MB total memory and {:.2}% peak CPU per process ({:.2}% total).",
+                            primary.1, members.len(), total_memory, max_cpu, total_cpu
+                        );
+                        let recommendation = get_context_aware_recommendation(&primary.1);
+
+                        let finding = BloatFinding {
+                            process_name: primary.1.clone(),
+                            pid: primary.0,
+                            memory_mb: total_memory,
+                            cpu_percent: max_cpu,
+                            startup_time_ms: 0,
+                            dependencies: Vec::new(),
+                            severity,
+                            description,
+                            recommendation,
+                            alternative: None,
+                        };
+
+                        summary.total += 1;
+                        match severity {
+                            Severity::Critical => summary.critical += 1,
+                            Severity::High => summary.high += 1,
+                            Severity::Medium => summary.medium += 1,
+                            Severity::Low => summary.low += 1,
+                        }
+                        findings.push(finding);
+                    }
+                }
+            } else {
+                let member = &members[0];
+                let memory_mb = member.2;
+                let cpu_percent = member.3;
+
+                let is_bloated =
+                    memory_mb > memory_threshold_mb || cpu_percent > cpu_threshold_percent;
+
+                if is_bloated {
+                    let severity = self.determine_bloat_severity(memory_mb, cpu_percent);
+                    if severity >= self.min_severity {
+                        let description = format!(
+                            "{} is using {:.2} MB of memory and {:.2}% CPU.",
+                            member.1, memory_mb, cpu_percent
+                        );
+                        let recommendation = get_context_aware_recommendation(&member.1);
+                        let alternative = self.config.get_alternative(&member.1);
+
+                        let finding = BloatFinding {
+                            process_name: member.1.clone(),
+                            pid: member.0,
                             memory_mb,
                             cpu_percent,
-                        ),
-                        recommendation: self.get_bloat_recommendation(&process_name),
-                        alternative,
-                    };
+                            startup_time_ms: 0,
+                            dependencies: Vec::new(),
+                            severity,
+                            description,
+                            recommendation,
+                            alternative,
+                        };
 
-                    summary.total += 1;
-                    match severity {
-                        Severity::Critical => summary.critical += 1,
-                        Severity::High => summary.high += 1,
-                        Severity::Medium => summary.medium += 1,
-                        Severity::Low => summary.low += 1,
+                        summary.total += 1;
+                        match severity {
+                            Severity::Critical => summary.critical += 1,
+                            Severity::High => summary.high += 1,
+                            Severity::Medium => summary.medium += 1,
+                            Severity::Low => summary.low += 1,
+                        }
+                        findings.push(finding);
                     }
-
-                    findings.push(finding);
                 }
             }
         }
@@ -269,7 +363,7 @@ impl Scanner {
     }
 
     fn get_process_connections(&self, pid: u32) -> Result<Option<Vec<NetworkConnection>>> {
-        let connections = Vec::new();
+        let mut connections = Vec::new();
 
         #[cfg(unix)]
         {
@@ -294,7 +388,9 @@ impl Scanner {
 
         #[cfg(windows)]
         {
-            let _ = pid;
+            if let Ok(conns) = windows::network::get_process_connections(pid) {
+                connections = conns;
+            }
         }
 
         if connections.is_empty() {
@@ -304,6 +400,7 @@ impl Scanner {
         }
     }
 
+    #[allow(dead_code)]
     fn get_process_dependencies(&self, pid: u32) -> Result<Vec<String>> {
         let dependencies = Vec::new();
 
@@ -403,20 +500,20 @@ impl Scanner {
     }
 
     fn determine_bloat_severity(&self, memory_mb: f64, cpu_percent: f64) -> Severity {
-        let memory_score = if memory_mb > 1000.0 {
+        let memory_score = if memory_mb > 2000.0 {
             3
-        } else if memory_mb > 500.0 {
+        } else if memory_mb > 1000.0 {
             2
-        } else if memory_mb > 200.0 {
+        } else if memory_mb > 500.0 {
             1
         } else {
             0
         };
-        let cpu_score = if cpu_percent > 50.0 {
+        let cpu_score = if cpu_percent > 80.0 {
             3
-        } else if cpu_percent > 20.0 {
+        } else if cpu_percent > 50.0 {
             2
-        } else if cpu_percent > 10.0 {
+        } else if cpu_percent > 20.0 {
             1
         } else {
             0
@@ -478,6 +575,7 @@ impl Scanner {
         )
     }
 
+    #[allow(dead_code)]
     fn get_bloat_description(
         &self,
         process_name: &str,
@@ -485,16 +583,14 @@ impl Scanner {
         cpu_percent: f64,
     ) -> String {
         format!(
-            "{} is using {:.2} MB of memory and {:.2}% CPU, indicating potential resource bloat.",
+            "{} is using {:.2} MB of memory and {:.2}% CPU (per-core normalized).",
             process_name, memory_mb, cpu_percent
         )
     }
 
+    #[allow(dead_code)]
     fn get_bloat_recommendation(&self, process_name: &str) -> String {
-        format!(
-            "Consider optimizing {}'s settings or replacing it with a more efficient alternative.",
-            process_name
-        )
+        get_context_aware_recommendation(process_name)
     }
 
     fn get_permissions_description(&self, process_name: &str) -> String {
@@ -548,10 +644,163 @@ fn is_system_process(process_name: &str) -> bool {
     }
     #[cfg(not(any(unix, windows)))]
     {
-        // Default: don't filter any processes on unknown platforms
         let _ = process_name;
         false
     }
+}
+
+fn is_known_safe_process(process_name: &str) -> bool {
+    let lower = process_name.to_lowercase();
+
+    let known_safe = [
+        "msmpeng.exe",
+        "antimalware service executable",
+        "memory compression",
+        "csrss.exe",
+        "wininit.exe",
+        "lsass.exe",
+        "services.exe",
+        "svchost.exe",
+        "corpaudit.exe",
+        "corpaudit",
+        "taskmgr.exe",
+        "perfmon.exe",
+        "conhost.exe",
+        "runtimebroker.exe",
+        "searchindexer.exe",
+        "searchui.exe",
+        "shellinfrastructurehost.exe",
+        "startmenuexperiencehost.exe",
+        "textinputhost.exe",
+        "widgethost.exe",
+        "fontdrvhost.exe",
+        "sihost.exe",
+        "ctfmon.exe",
+        "dllhost.exe",
+    ];
+
+    known_safe.iter().any(|s| lower.contains(s))
+}
+
+fn get_process_family(process_name: &str) -> String {
+    let lower = process_name.to_lowercase();
+
+    let chromium_families = ["chrome", "brave", "edge", "opera", "vivaldi", "chromium"];
+    for app in &chromium_families {
+        if lower.contains(app) {
+            return app.to_string();
+        }
+    }
+
+    let electron_families = [
+        "code",
+        "code-insiders",
+        "slack",
+        "discord",
+        "teams",
+        "signal",
+        "whatsapp",
+        "obsidian",
+        "notion",
+    ];
+    for app in &electron_families {
+        if lower.contains(app) {
+            return app.to_string();
+        }
+    }
+
+    process_name.to_string()
+}
+
+fn get_context_aware_recommendation(process_name: &str) -> String {
+    let lower = process_name.to_lowercase();
+
+    // Chromium-based browsers
+    let chromium_apps = ["chrome", "brave", "edge", "opera", "vivaldi", "chromium"];
+    if chromium_apps.iter().any(|a| lower.contains(a)) {
+        return format!(
+            "{} uses a multi-process architecture for security and stability.\n\
+             This is normal behavior, not bloat.\n\n\
+             Actionable steps:\n\
+             - Suspend unused tabs (right-click > 'Save memory')\n\
+             - Disable unnecessary extensions (Settings > Extensions)\n\
+             - Enable Memory Saver mode (Settings > Performance)\n\
+             - Use 'Efficiency mode' for background tabs\n\
+             - Consider reducing open tab count",
+            process_name
+        );
+    }
+
+    // Electron apps
+    let electron_apps = [
+        "code", "slack", "discord", "teams", "signal", "obsidian", "notion",
+    ];
+    if electron_apps.iter().any(|a| lower.contains(a)) {
+        return format!(
+            "{} is Electron-based and uses multiple processes by design.\n\
+             This provides better security through process isolation.\n\n\
+             Actionable steps:\n\
+             - Disable unused extensions/plugins\n\
+             - Close idle workspaces/channels\n\
+             - Enable hardware acceleration (reduces CPU usage)\n\
+             - Check for memory leaks in specific extensions\n\
+             - Restart the app periodically to clear memory\n\
+             - Consider native alternatives if resource usage is critical",
+            process_name
+        );
+    }
+
+    // Windows Defender
+    if lower.contains("msmpeng") || lower.contains("defender") {
+        return format!(
+            "{} is Windows Defender's core security process.\n\
+             WARNING: DO NOT DISABLE - this compromises system security.\n\n\
+             To reduce impact legitimately:\n\
+             - Add build/dev folder exclusions in Windows Security settings\n\
+             - Schedule scans during off-hours\n\
+             - Exclude source code folders from real-time scanning\n\
+             - Consider 'Performance mode' in Windows Security settings",
+            process_name
+        );
+    }
+
+    // Memory Compression
+    if lower.contains("memory compression") {
+        return format!(
+            "{} is a Windows optimization feature.\n\
+             It compresses inactive memory pages to improve performance.\n\
+             WARNING: Disabling it will WORSE performance, not improve it.\n\
+             This is NOT bloat - it's a core Windows feature.",
+            process_name
+        );
+    }
+
+    // System services
+    let safe_services = ["svchost", "runtimebroker", "searchindexer", "sihost", "csrss"];
+    if safe_services.iter().any(|s| lower.contains(s)) {
+        return format!(
+            "{} is a core Windows system process.\n\
+             WARNING: This is required for Windows to function properly.\n\
+             Do not attempt to disable or modify this process.\n\n\
+             If experiencing issues:\n\
+             - Run 'sfc /scannow' to check for system file corruption\n\
+             - Check for Windows Updates\n\
+             - Scan for malware (legitimate processes shouldn't use excessive resources)",
+            process_name
+        );
+    }
+
+    // Generic recommendation
+    format!(
+        "Monitor {} over time to confirm sustained high usage.\n\
+         Single snapshots may reflect temporary workload spikes.\n\n\
+         General steps:\n\
+         - Check if process is performing updates or background tasks\n\
+         - Review process-specific settings for performance options\n\
+         - Consider if the process is necessary for your workflow\n\
+         - Look for lightweight alternatives if appropriate",
+        process_name
+    )
 }
 
 fn is_telemetry_connection(conn: &NetworkConnection, telemetry_domains: &[String]) -> bool {
@@ -615,6 +864,7 @@ fn resolve_domain(address: &str) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 fn parse_tcp_line(line: &str) -> Option<NetworkConnection> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() < 4 {
@@ -636,6 +886,7 @@ fn parse_tcp_line(line: &str) -> Option<NetworkConnection> {
     })
 }
 
+#[allow(dead_code)]
 fn parse_udp_line(line: &str) -> Option<NetworkConnection> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() < 4 {
@@ -657,6 +908,7 @@ fn parse_udp_line(line: &str) -> Option<NetworkConnection> {
     })
 }
 
+#[allow(dead_code)]
 fn parse_socket_address(addr: &str) -> Option<(String, u16)> {
     let colon_pos = addr.rfind(':')?;
     let ip_hex = &addr[..colon_pos];
@@ -672,6 +924,7 @@ fn parse_socket_address(addr: &str) -> Option<(String, u16)> {
     Some((ip, port))
 }
 
+#[allow(dead_code)]
 fn hex_to_ip(hex: &str) -> Option<String> {
     if hex.len() != 8 {
         return None;
@@ -689,6 +942,7 @@ fn hex_to_ip(hex: &str) -> Option<String> {
     ))
 }
 
+#[allow(dead_code)]
 fn hex_to_ipv6(hex: &str) -> Option<String> {
     if hex.len() != 32 {
         return None;
