@@ -255,6 +255,8 @@ Built with:
 
 CorpAudit is provided as-is for educational and informational purposes. Always review generated fixes before applying them. The authors are not responsible for any damage caused by using this tool.
 
+Note From Developer: This Is A AI Coded Tool.
+
 ## Support
 
 - GitHub Issues: https://github.com/aidurr/CorpAudit/issues
