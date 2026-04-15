@@ -2,7 +2,10 @@ use crate::audit::*;
 use crate::config::Config;
 use crate::startup;
 use anyhow::Result;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+#[cfg(unix)]
+use std::collections::HashSet;
+#[cfg(unix)]
 use std::fs;
 use std::process::Command;
 use sysinfo::System;

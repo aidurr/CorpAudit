@@ -1,6 +1,5 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AppState {
@@ -330,4 +329,8 @@ pub fn run_gui() -> eframe::Result<()> {
         options,
         Box::new(|cc| Ok(Box::new(CorpAuditApp::new(cc)))),
     )
+}
+
+fn main() -> eframe::Result<()> {
+    run_gui()
 }

@@ -122,7 +122,7 @@ impl WindowsTelemetryDetector {
             for value_name in &telemetry_values {
                 if let Ok(value) = key.get_value::<u32, _>(value_name) {
                     // Check if telemetry is ENABLED (non-zero means enabled)
-                    let is_enabled = match value_name {
+                    let is_enabled = match *value_name {
                         // Some values are inverted: 0 means enabled, 1 means disabled
                         "DisableTelemetryOptIn" | "DisableWindowsConsumerFeatures" => value == 0,
                         // Normal: non-zero means enabled
